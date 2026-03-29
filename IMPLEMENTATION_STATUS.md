@@ -2,10 +2,11 @@
 
 ## 当前阶段结论
 
-- Phase 01 已完成 review closeout，并被标记为 `accepted`。
-- 当前阶段只完成骨架与门禁收口，不包含真实 `mysql.database.create` 执行。
-- `ready_for_next_phase = true`
-- `next_phase = phase-02`
+- 当前实现分支已进入 Phase 02 review handoff，目标是“最小控制链路可跑通”。
+- 当前系统已能通过 HTTP API 走通 request / approval / execute / audit / evidence 最小闭环。
+- 当前系统仍不做真实 `mysql.database.create` 执行。
+- `ready_for_next_phase = false`
+- `next_phase = phase-02-review`
 
 ## 已完成
 
@@ -92,66 +93,99 @@
   - adapter idempotency key format guardrail
   - skill contract mapping guardrail
   - API unified entry / error mapping guardrail
+  - Phase 02 approval transition tests
+  - Phase 02 execute revalidate / stale / idempotent execute tests
+  - Phase 02 HTTP control-flow integration test
+
+## Phase 02 已新增
+
+- 已把 [internal/persistence/memory.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/persistence/memory.go) 接成共享 in-memory persistence：
+  - `ActionRequest`
+  - `AssistantOrder`
+  - `ExecutionPlan`
+  - `ApprovalState`
+  - `ExecutionTask`
+  - `AuditEvent`
+  - `EvidencePack`
+- 已把 [internal/application/actionrequest/service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/actionrequest/service.go) 从内部 map 迁移到共享 store，并打通：
+  - `ActionRequest` 提交
+  - `AuthorizationDecision` 生成
+  - `AssistantOrder` 创建
+  - `ExecutionPlan` 冻结
+  - `ApprovalService.Create(...)`
+  - `ExecuteApprovedOrder(...)`
+- 已新增 [internal/application/approval/service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/approval/service.go)，接通：
+  - `WAITING_APPROVAL -> APPROVED`
+  - `WAITING_APPROVAL -> REJECTED`
+  - `WAITING_APPROVAL -> EXPIRED`
+  - `SELF_APPROVAL_FORBIDDEN`
+- 已升级 [internal/application/execution/stub_planner.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/execution/stub_planner.go)：
+  - 加入最小 `Plan Revalidate` 占位逻辑
+  - `PLAN_STALE` 时阻断任务创建
+  - `TaskRuntime` 仅创建 `RUNNING` task skeleton
+- 已升级 [internal/application/audit/memory_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/audit/memory_service.go) 与 [internal/application/audit/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/audit/contracts.go)：
+  - `AuditEvent` 采用 append-only 语义
+  - `AuditLedgerView` 已可聚合 `latest_order_status` / `latest_task_id` / `latest_execution_summary`
+- 已升级 [internal/application/evidence/memory_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/evidence/memory_service.go) 与 [internal/application/evidence/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/evidence/contracts.go)：
+  - execute 成功起 task skeleton 后可查询最小 evidence
+  - `PLAN_STALE` 路径会生成 `task_id = null` 的 failure evidence
+- 已保留关键 guardrails：
+  - `AuthorizationService` 仍是 request 路径唯一最终授权出口
+  - execute 仍然必须显式触发
+  - approval 与 execute 仍然分离
+  - `AssetResolver` 仍然 exact match
+  - `DBNativeAdapter` 仍不做真实 `CREATE DATABASE`
+- 已新增 Phase 02 文档：
+  - [design_docs/24-phase-02-control-flow-notes-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/24-phase-02-control-flow-notes-v0.1.md)
+  - [design_docs/25-phase-02-manual-api-runbook-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/25-phase-02-manual-api-runbook-v0.1.md)
 
 ## 当前仍是 stub
 
 - [internal/application/approval/noop_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/approval/noop_service.go)
-  - 审批 service 仅是占位，没有与共享 order store 打通。
+  - 旧 Phase 01 noop 仍保留在仓库中，但主程序已改用新的 repo-backed `ApprovalService`。
 - [internal/application/actionrequest/service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/actionrequest/service.go)
-  - `Submit(...)` 已形成 request -> authorization -> order -> plan 的骨架。
-  - `ExecuteApprovedOrder(...)` 现在已接入独立 execute auth 门禁。
-  - 但仍不做真实 `re-validate -> router -> runtime` 启动。
+  - request / execute 主链路已打通。
+  - 但 `execute` 仍只起 task skeleton，不调用真实 adapter execute。
 - [internal/application/execution/stub_planner.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/execution/stub_planner.go)
-  - planner/router/runtime 仍是静态 stub。
+  - planner/router/runtime 仍是静态 stub，`Revalidate(...)` 只做最小占位检查。
 - [internal/application/evidence/memory_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/evidence/memory_service.go)
-  - 当前只提供 query/build contract 的内存 skeleton；success/failure/`PLAN_STALE` 的真实写入时机仍未接线。
+  - 当前 evidence 语义仍是 Phase 02 最小控制流证据，不是最终执行证据模型。
 - [internal/application/audit/memory_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/audit/memory_service.go)
-  - 当前只提供最小内存事件流与 query view，不是 append-only 持久化实现。
+  - 当前仍是内存型 append-only 审计，不是持久化数据库实现。
 - [internal/skill/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/skill/contracts.go)
   - skill 输入输出 contract 已建立，但还没有单独的 Skill runtime / SDK 层。
 - [internal/adapters/dbnative/adapter.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/adapters/dbnative/adapter.go)
   - 仅实现 adapter contract、dry-run stub 和失败型 execute 返回，没有真实 MySQL 连接与 `CREATE DATABASE`。
 - [internal/persistence/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/persistence/contracts.go)
-  - repository interface 已定义，但未在 application service 中全面接线。
+  - 仍是内存 contract + store，不是数据库级持久化仓储。
 
 ## 还没有实现
 
 - 完整 `mysql.database.create` 真实执行闭环
 - execute 前真实 `Plan Re-validate`
 - 基于持久化 `ExecutePolicy` 的真实校验
-- 审批状态与 order 状态的共享持久化
-- `ExecutionTask` 真正创建、推进与查询
-- 审批 TTL 的真实过期扫描与状态收敛
-- 成功/失败/`PLAN_STALE` 三条路径的真实 `EvidencePack` 固化
-- append-only audit repository
-- 基于 persistence repository 的统一存储层
+- approval actor 从认证上下文解析并做审批角色校验
+- `ExecutionTask` 真正推进到 terminal state
+- 审批 TTL 的后台调度与真实周期扫描
+- 成功/失败终态的真实 `EvidencePack` 固化
+- 持久化数据库版 append-only audit repository
+- 持久化数据库版 unified repository
 - 多 adapter 路由策略
 
 ## 下一阶段准备做什么
 
-1. 先把 `ActionRequestService` 从内部 map 存储切到 `internal/persistence` repository interface。
-2. 打通 `ApprovalService` 与 `AssistantOrder` / `ExecutionPlan` 共享存储，落真实：
-   - `WAITING_APPROVAL -> APPROVED`
-   - `SELF_APPROVAL_FORBIDDEN`
-   - `REJECTED / EXPIRED`
-   - `ApprovalPolicy.TTL` 驱动的过期扫描
-3. 打通 `ExecuteApprovedOrder(...)` 的最小闭环：
-   - execute auth（基于独立 `ExecutePolicy`）
-   - plan revalidate
-   - `ExecutionRouter`
-   - `TaskRuntime`
-4. 在 `DBNativeAdapter` 中只补 `mysql.database.create` 的最小纵切，不扩散到其他动作。
-5. 把审计与证据从当前内存 stub 升级为 append-only / 可查询的真实实现。
-6. 补 `internal/application/approval/` 的直接测试文件。
-7. 明确 `MemoryAuditService.GetViewByRequestID(...)` 在后续 execute / retry 场景下的 `trace_id` 策略。
+1. 先完成 Phase 02 review，确认当前最小闭环没有破坏控制边界。
+2. 在 Phase 03 把 `TaskRuntime` 从 skeleton 升级为真实 southbound 执行。
+3. 在 `DBNativeAdapter` 中只补 `mysql.database.create` 的最小纵切，不扩散到其他动作。
+4. 把 execute policy 与 approval actor 校验从静态/请求体模式升级到正式认证上下文与策略求值。
+5. 把当前内存型 audit / evidence / repository 切到持久化实现。
 
 ## 当前架构风险与待确认点
 
-- 目前 `ApprovalService` 与 `ActionRequestService` 还没有共享状态仓库，approval API 只是接口占位，不是可用审批闭环。
-- `ExecuteApprovedOrder(...)` 还没有真正进入 `ExecutionTask`，因此 execute API 现在主要体现“独立 execute 门禁存在”，不是“执行已可用”。
-- 当前 persistence 仍是 contract-first，尚未固化最终 repository shape；下一轮接线时要避免再把 application service 写回 internal map。
+- 当前 execute 成功路径的 `EvidencePack.execution_success=true` 表示“控制链路成功启动 task skeleton”，不是“数据库已创建成功”；Phase 03 需要把这个语义切回真实终态。
+- approval API 当前仍通过 body 传 `approver_id`，正式鉴权语义还未收口到认证上下文。
+- 当前 persistence 是共享内存 store，适合 Phase 02 演示与测试，但不具备重启恢复能力。
 - 目前 northbound auth context 通过 HTTP header 占位承载，正式接入时需要替换成真实认证中间件，但不能改变 `PrincipalResolver` 是唯一身份装配入口这一原则。
-- 当前 `AuditService` / `EvidenceService` 的 Phase 01 含义是“contract + query skeleton + trace contract 已固定”，不是“执行结束落账链路已完成”。
 - review 文档里把 `APPROVAL_EXPIRED` 写成 order status，但正式 spec / interface design / schema 的权威语义是 order `EXPIRED` + audit event `APPROVAL_EXPIRED`。当前代码按正式文档实现，并已用 `// REVIEW:` 注释标明。
 - 目前 `DBNativeAdapter` 的 stub 明确拒绝真实执行；下一轮实现时必须继续保持：
   - 不绕过 `AuthorizationService`
@@ -161,5 +195,9 @@
 
 ## 验证记录
 
-- reviewed branch `feat/p1-baseline-gap-and-guardrails` 已在 Claude review 中确认：`go test ./...` 全部通过
-- 本轮 closeout 验证只覆盖文档与状态收口，不新增业务代码
+- `go test ./...`
+- 本地 HTTP smoke 已验证：
+  - prod: `WAITING_APPROVAL -> APPROVED -> EXECUTING`
+  - stale: `APPROVED -> PLAN_STALE`
+  - `GET /api/v1/audit-ledger/{request_id}` 可查询最小闭环
+  - `GET /api/v1/evidence-packs/{order_id}` 可查询最小闭环
