@@ -2,12 +2,12 @@
 
 ## 当前阶段结论
 
-- Phase 01 已基于最新 `main` 完成 review closeout-v2，并被标记为 `accepted`。
-- 当前实现分支已进入 Phase 02 review handoff，目标是“最小控制链路可跑通”。
+- Phase 02 已完成 review closeout，并被标记为 `accepted`。
+- 当前仓库状态已同步为：Phase 02 收口完成，准备进入 Phase 03。
 - 当前系统已能通过 HTTP API 走通 request / approval / execute / audit / evidence 最小闭环。
 - 当前系统仍不做真实 `mysql.database.create` 执行。
-- `ready_for_next_phase = false`
-- `next_phase = phase-02-review`
+- `ready_for_next_phase = true`
+- `next_phase = phase-03`
 
 ## 已完成
 
@@ -176,11 +176,10 @@
 
 ## 下一阶段准备做什么
 
-1. 先完成 Phase 02 review，确认当前最小闭环没有破坏控制边界。
-2. 在 Phase 03 把 `TaskRuntime` 从 skeleton 升级为真实 southbound 执行。
-3. 在 `DBNativeAdapter` 中只补 `mysql.database.create` 的最小纵切，不扩散到其他动作。
-4. 把 execute policy 与 approval actor 校验从静态/请求体模式升级到正式认证上下文与策略求值。
-5. 把当前内存型 audit / evidence / repository 切到持久化实现。
+1. 在 Phase 03 把 `TaskRuntime` 从 skeleton 升级为真实 southbound 执行。
+2. 在 `DBNativeAdapter` 中只补 `mysql.database.create` 的最小纵切，不扩散到其他动作。
+3. 把 execute policy 与 approval actor 校验从静态/请求体模式升级到正式认证上下文与策略求值。
+4. 把当前内存型 audit / evidence / repository 切到持久化实现。
 
 ## 当前架构风险与待确认点
 
@@ -199,6 +198,7 @@
 
 - reviewed branch `feat/p1-baseline-gap-and-guardrails` 已在 Claude review 中确认：`go test ./...` 全部通过
 - `docs/phase-01-closeout-v2` 已于 2026-03-29 fresh 执行 `go test ./...` 并通过
+- `feat/p2-min-control-flow-v2` 已获 Claude review `PASS`，允许进入 Phase 03
 - `go test ./...`
 - 本地 HTTP smoke 已验证：
   - prod: `WAITING_APPROVAL -> APPROVED -> EXECUTING`
