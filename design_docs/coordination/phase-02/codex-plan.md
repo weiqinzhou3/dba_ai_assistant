@@ -8,6 +8,12 @@
 
 打通 request、authorization、order、approval、execute、audit/evidence 基础链路，但不做真实 MySQL 写操作。
 
+## 必须回应事项
+
+1. `RiskEngine.Evaluate()` 如何根据 asset environment 动态给出 `R1/R2`：
+2. `Plan Revalidate` 在本阶段是否会调用 `Adapter.DryRun()`，如果会，调用位置是什么；如果不会，stub 如何保留：
+3. `PLAN_STALE` 路径的 `EvidencePack` 如何落地，尤其是 `task_id = null` 和 stale reason：
+
 ## 本轮计划
 
 - 当前分支：
@@ -17,4 +23,3 @@
 - 预计修改路径：
 - 计划验证命令：
 - 请求 Claude review 的重点：
-

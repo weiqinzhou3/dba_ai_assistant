@@ -12,7 +12,25 @@
 
 ## 当前状态
 
-当前无全局决策记录。首条记录请直接复制以下模板并追加到文末。
+### Decision 1
+
+- Date: 2026-03-29
+- Phase: Phase 00 / Phase 01 pre-gate
+- Proposed by: Codex
+- Confirmed by: Claude Code review `phase-00-claude-review-on-roadmap.md`
+- Decision: 新 Phase 路线图基于仓库中已有 Go skeleton、既有测试和现有正式文档继续推进，不从干净状态重写。
+- Reason: 当前仓库已存在大量 Phase 01 级产物，包括 domain objects、application services、API skeleton、adapter stubs 和 tests。重开新骨架会浪费已存在的实现与验证结果。
+- Impacted files / modules:
+  - `cmd/`
+  - `internal/`
+  - `IMPLEMENTATION_STATUS.md`
+  - `design_docs/phases/phase-01-skeleton-guardrails.md`
+  - `design_docs/coordination/phase-01/codex-plan.md`
+- Affected future phases: Phase 01 到 Phase 05
+- Follow-up action:
+  - Phase 01 开始前，Codex 必须先做“已有产物盘点 + gap analysis”
+  - 盘点结果写入 `design_docs/coordination/phase-01/codex-plan.md`
+  - 只有在 gap analysis 完成后，才允许把 dashboard 状态改为 `in_progress`
 
 ## 模板
 
@@ -27,4 +45,3 @@
 - Impacted files / modules:
 - Affected future phases:
 - Follow-up action:
-

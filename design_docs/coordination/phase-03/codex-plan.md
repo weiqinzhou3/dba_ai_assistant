@@ -8,6 +8,15 @@
 
 接入真实 `DBNativeAdapter`，交付 `mysql.database.create` 可执行 MVP。
 
+## 必须回应事项
+
+1. `DBNativeAdapter.DryRun()` 的真实预检范围是什么：
+2. 幂等三种情况如何处理：
+   - 前次已成功
+   - 前次进行中
+   - 前次已失败
+3. 哪些验证将证明 `PLAN_STALE`、幂等冲突和成功路径都已覆盖：
+
 ## 本轮计划
 
 - 当前分支：
@@ -17,4 +26,3 @@
 - 预计修改路径：
 - 计划验证命令：
 - 请求 Claude review 的重点：
-

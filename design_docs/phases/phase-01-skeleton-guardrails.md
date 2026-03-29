@@ -27,6 +27,7 @@
 6. `AssetResolver.ResolveExact(...)` guardrail。
 7. 审批 API 与 execute API 的物理分离。
 8. northbound DTO / skill contract / 错误码 / `trace_id` 传递。
+9. Adapter SPI 骨架必须包含 `DryRun(...)` 方法签名，以及 `AdapterDryRunResult` / `AdapterExecutionResult` 类型。
 
 ## 禁止事项
 
@@ -55,6 +56,10 @@
 5. 所有 northbound 返回对象带 `trace_id`。
 6. 角色常量中已包含 `control_executor`。
 7. `ApprovalPolicy` TTL 与 `ExecutePolicy` 已有明确模型。
+8. Skill 输入输出 struct 已定义，至少覆盖：
+   - `request_mysql_database_create`
+   - `execute_assistant_order`
+9. Adapter SPI 已显式包含 `DryRun(...)` 与 `AdapterDryRunResult`。
 
 ## 风险点
 
@@ -78,4 +83,3 @@
 2. `feat(api): separate request approval execute endpoints`
 3. `test(guardrail): lock exact asset and execute policy rules`
 4. `docs(status): update implementation status for phase 01`
-

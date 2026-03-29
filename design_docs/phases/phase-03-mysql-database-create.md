@@ -18,8 +18,16 @@
    - `check_database_not_exists`
    - `create_database`
    - `verify_database_created`
-4. `AdapterExecutionResult`、统一错误码、SQL 摘要与 artifact 归档。
-5. `EvidencePack` 真实采集：
+4. `DBNativeAdapter.DryRun()` 实现真实预检，至少检查：
+   - 连接可达
+   - 数据库名符合平台命名规范
+   - 目标数据库当前不存在
+5. 幂等处理必须明确区分三种情况：
+   - 前次已成功 -> 返回受控幂等成功，不重复执行
+   - 前次进行中 -> 返回幂等冲突，不创建新任务
+   - 前次已失败 -> 允许受控重试
+6. `AdapterExecutionResult`、统一错误码、SQL 摘要与 artifact 归档。
+7. `EvidencePack` 真实采集：
    - before/after snapshot
    - failure detail
    - rollback suggestion
@@ -48,6 +56,8 @@
 4. execute 前数据库状态变化能触发 `PLAN_STALE`。
 5. 成功、失败、`PLAN_STALE` 三条路径均有审计与证据。
 6. 返回给上层的是统一错误码，而不是裸驱动异常。
+7. `DBNativeAdapter.DryRun()` 已实现并纳入验证。
+8. 幂等成功、幂等冲突、失败后受控重试三种情况均有明确行为。
 
 ## 风险点
 
@@ -72,4 +82,3 @@
 2. `feat(adapter): add dbnative create-database execution`
 3. `feat(evidence): capture before after snapshots for mysql create`
 4. `test(mysql): add integration coverage for create database flow`
-

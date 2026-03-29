@@ -8,18 +8,23 @@
 
 1. `POST /api/v1/action-requests` 的真实链路接线。
 2. `PrincipalResolver`、`AssetResolver`、`PolicyEngine`、`RiskEngine`、`AuthorizationService` 接入统一 repository。
-3. `AssistantOrder` 与 `ExecutionPlan` 共享持久化。
-4. `ApprovalService` 实现：
+3. `RiskEngine.Evaluate()` 必须根据 asset 的 environment 与敏感度动态计算风险等级，至少满足：
+   - dev/test -> `R1`
+   - prod -> `R2`
+   - 高敏目标至少触发 require approval
+4. `AssistantOrder` 与 `ExecutionPlan` 共享持久化。
+5. `ApprovalService` 实现：
    - `WAITING_APPROVAL -> APPROVED`
    - `WAITING_APPROVAL -> REJECTED`
    - `WAITING_APPROVAL -> EXPIRED`
-5. `POST /api/v1/orders/{order_id}/execute` 接入：
+6. `POST /api/v1/orders/{order_id}/execute` 接入：
    - execute auth
    - `ExecutePolicy`
    - `Plan Revalidate`
+   - 可选择调用 `Adapter.DryRun()` 作为预检手段之一（本阶段允许 stub）
    - task 创建骨架
-6. append-only `AuditEvent` 最小写入。
-7. `EvidencePack` 最小结构与查询接口。
+7. append-only `AuditEvent` 最小写入。
+8. `EvidencePack` 最小结构与查询接口，且 `PLAN_STALE` 路径必须支持 `task_id = null`。
 
 ## 禁止事项
 
@@ -46,6 +51,7 @@
 5. `Plan Revalidate` 可以触发 `PLAN_STALE` 且不创建任务。
 6. 审批过期扫描最少以 stub 方式可执行。
 7. `REQUEST_ACCEPTED` 是第一条审计事件。
+8. `PLAN_STALE` 路径生成 `EvidencePack`，至少包含 stale reason，且 `task_id = null`。
 
 ## 风险点
 
@@ -70,4 +76,3 @@
 2. `feat(approval): add approval transitions and expiry scan`
 3. `feat(execute): add execute authorization and revalidate gate`
 4. `feat(audit): add append-only audit event repository`
-
