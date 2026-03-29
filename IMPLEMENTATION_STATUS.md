@@ -204,8 +204,6 @@
   - 旧 Phase 01 noop 仍保留在仓库中，但主程序已改用新的 repo-backed `ApprovalService`。
 - [internal/application/audit/memory_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/audit/memory_service.go)
   - 当前仍是内存型 append-only 审计，不是持久化数据库实现。
-- [internal/skill/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/skill/contracts.go)
-  - skill 输入输出 contract 已建立，但还没有单独的 Skill runtime / SDK 层。
 - [internal/persistence/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/persistence/contracts.go)
   - 仍是内存 contract + store，不是数据库级持久化仓储。
 
