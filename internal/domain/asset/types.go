@@ -21,6 +21,7 @@ type Asset struct {
 	Environment     string    `json:"environment"`
 	ServiceInstance string    `json:"service_instance"`
 	CanonicalName   string    `json:"canonical_name"`
+	Sensitivity     string    `json:"sensitivity,omitempty"`
 	ConnectionRef   string    `json:"connection_ref,omitempty"`
 }
 

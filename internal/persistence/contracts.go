@@ -14,46 +14,48 @@ import (
 )
 
 type ActionRequestRepository interface {
-	Save(ctx context.Context, request action.Request) error
-	Get(ctx context.Context, requestID string) (action.Request, error)
+	SaveRequest(ctx context.Context, request action.Request) error
+	GetRequest(ctx context.Context, requestID string) (action.Request, error)
 }
 
 type OrderRepository interface {
-	Save(ctx context.Context, ord order.AssistantOrder) error
-	Get(ctx context.Context, orderID string) (order.AssistantOrder, error)
+	SaveOrder(ctx context.Context, ord order.AssistantOrder) error
+	GetOrder(ctx context.Context, orderID string) (order.AssistantOrder, error)
 }
 
 type PlanRepository interface {
-	Save(ctx context.Context, executionPlan plan.ExecutionPlan) error
-	GetByOrderID(ctx context.Context, orderID string) (plan.ExecutionPlan, error)
+	SavePlan(ctx context.Context, executionPlan plan.ExecutionPlan) error
+	GetPlanByOrderID(ctx context.Context, orderID string) (plan.ExecutionPlan, error)
 }
 
 type TaskRepository interface {
-	Save(ctx context.Context, executionTask task.ExecutionTask) error
-	Get(ctx context.Context, taskID string) (task.ExecutionTask, error)
+	SaveTask(ctx context.Context, executionTask task.ExecutionTask) error
+	GetTask(ctx context.Context, taskID string) (task.ExecutionTask, error)
+	GetTaskByOrderID(ctx context.Context, orderID string) (task.ExecutionTask, error)
 }
 
 type ApprovalRepository interface {
-	Save(ctx context.Context, state approval.State) error
-	GetByOrderID(ctx context.Context, orderID string) (approval.State, error)
+	SaveApprovalState(ctx context.Context, state approval.State) error
+	GetApprovalStateByOrderID(ctx context.Context, orderID string) (approval.State, error)
+	ListWaitingApprovalStates(ctx context.Context, limit int) ([]approval.State, error)
 }
 
 type ApprovalPolicyRepository interface {
-	Save(ctx context.Context, approvalPolicy policy.ApprovalPolicy) error
-	ListByAction(ctx context.Context, actionName string) ([]policy.ApprovalPolicy, error)
+	SaveApprovalPolicy(ctx context.Context, approvalPolicy policy.ApprovalPolicy) error
+	ListApprovalPoliciesByAction(ctx context.Context, actionName string) ([]policy.ApprovalPolicy, error)
 }
 
 type ExecutePolicyRepository interface {
-	Save(ctx context.Context, executePolicy policy.ExecutePolicy) error
-	ListByAction(ctx context.Context, actionName string) ([]policy.ExecutePolicy, error)
+	SaveExecutePolicy(ctx context.Context, executePolicy policy.ExecutePolicy) error
+	ListExecutePoliciesByAction(ctx context.Context, actionName string) ([]policy.ExecutePolicy, error)
 }
 
 type AuditRepository interface {
-	Append(ctx context.Context, event audit.Event) error
-	ListByRequestID(ctx context.Context, requestID string) ([]audit.Event, error)
+	AppendAuditEvent(ctx context.Context, event audit.Event) error
+	ListAuditEventsByRequestID(ctx context.Context, requestID string) ([]audit.Event, error)
 }
 
 type EvidenceRepository interface {
-	Save(ctx context.Context, pack evidence.Pack) error
-	GetByOrderID(ctx context.Context, orderID string) (evidence.Pack, error)
+	SaveEvidencePack(ctx context.Context, pack evidence.Pack) error
+	GetEvidencePackByOrderID(ctx context.Context, orderID string) (evidence.Pack, error)
 }

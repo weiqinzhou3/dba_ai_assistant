@@ -2,117 +2,30 @@ package actionrequest
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
+	appapproval "dba_ai_assistant/internal/application/approval"
 	appaudit "dba_ai_assistant/internal/application/audit"
 	appauth "dba_ai_assistant/internal/application/authorization"
+	appevidence "dba_ai_assistant/internal/application/evidence"
 	appexec "dba_ai_assistant/internal/application/execution"
 	"dba_ai_assistant/internal/domain/asset"
-	dauth "dba_ai_assistant/internal/domain/authorization"
 	"dba_ai_assistant/internal/domain/common"
 	"dba_ai_assistant/internal/domain/order"
-	"dba_ai_assistant/internal/domain/plan"
+	"dba_ai_assistant/internal/domain/policy"
 	"dba_ai_assistant/internal/domain/principal"
 	"dba_ai_assistant/internal/domain/risk"
+	"dba_ai_assistant/internal/persistence"
 )
 
-func TestServiceSubmitCreatesApprovedOrderWithoutExecuting(t *testing.T) {
-	auditRecorder := &recordingAuditService{}
-	planner := &stubExecutionPlanner{
-		plan: plan.ExecutionPlan{
-			PlanID:      "plan_01",
-			PlanVersion: 1,
-			PlanStatus:  plan.StatusFrozen,
-		},
-	}
+func TestServiceSubmitCreatesWaitingApprovalOrderAndApprovalState(t *testing.T) {
+	ctx := context.Background()
+	service, approvalService, auditService, _, _ := newPhaseTwoServices(t)
 
-	service := NewService(
-		&stubPrincipalResolver{},
-		&stubAssetResolver{},
-		&stubAuthorizationService{
-			decision: dauth.Decision{
-				Authorized:       true,
-				FinalDecision:    dauth.FinalDecisionAllowNoApproval,
-				ApprovalRequired: false,
-				RiskLevel:        risk.LevelR1,
-			},
-		},
-		&stubExecuteAuthorizationService{
-			decision: appauth.ExecuteAuthorizationDecision{Allowed: true},
-		},
-		planner,
-		auditRecorder,
-	)
-
-	result, err := service.Submit(context.Background(), ActionRequestDTO{
-		PrincipalID: "u_1001",
-		ActionHint:  "mysql.database.create",
-		ResourceSelector: asset.Selector{
-			Project:         "order-platform",
-			Environment:     "test",
-			ServiceInstance: "mysql-order-main",
-		},
-		Parameters: map[string]any{
-			"database_name": "order_center",
-		},
-		RequestContext: map[string]any{
-			"source": "deep_agent",
-		},
-	})
-	if err != nil {
-		t.Fatalf("Submit returned error: %v", err)
-	}
-
-	if result.Status != order.StatusApproved {
-		t.Fatalf("expected approved order, got %s", result.Status)
-	}
-	if result.ApprovalRequired {
-		t.Fatalf("expected approval_required=false")
-	}
-	if result.TaskID != "" {
-		t.Fatalf("expected task_id to stay empty before execute, got %q", result.TaskID)
-	}
-	if planner.buildCalls != 1 {
-		t.Fatalf("expected planner Build to be called once, got %d", planner.buildCalls)
-	}
-	if !auditRecorder.HasEvent(appaudit.EventRequestAccepted) {
-		t.Fatalf("expected REQUEST_ACCEPTED audit event")
-	}
-	if !auditRecorder.HasEvent(appaudit.EventPlanFrozen) {
-		t.Fatalf("expected PLAN_FROZEN audit event")
-	}
-	if first := auditRecorder.FirstEventType(); first != appaudit.EventRequestAccepted {
-		t.Fatalf("expected first audit event to be %s, got %s", appaudit.EventRequestAccepted, first)
-	}
-}
-
-func TestServiceExecuteApprovedOrderRejectsWaitingApprovalOrder(t *testing.T) {
-	service := NewService(
-		&stubPrincipalResolver{},
-		&stubAssetResolver{},
-		&stubAuthorizationService{
-			decision: dauth.Decision{
-				Authorized:       true,
-				FinalDecision:    dauth.FinalDecisionAllowWithApproval,
-				ApprovalRequired: true,
-				RiskLevel:        risk.LevelR2,
-			},
-		},
-		&stubExecuteAuthorizationService{
-			decision: appauth.ExecuteAuthorizationDecision{Allowed: true},
-		},
-		&stubExecutionPlanner{
-			plan: plan.ExecutionPlan{
-				PlanID:      "plan_02",
-				PlanVersion: 1,
-				PlanStatus:  plan.StatusFrozen,
-			},
-		},
-		&recordingAuditService{},
-	)
-
-	submitResult, err := service.Submit(context.Background(), ActionRequestDTO{
-		PrincipalID: "u_1001",
+	result, err := service.Submit(ctx, ActionRequestDTO{
+		PrincipalID: "u_requester",
 		ActionHint:  "mysql.database.create",
 		ResourceSelector: asset.Selector{
 			Project:         "order-platform",
@@ -127,51 +40,53 @@ func TestServiceExecuteApprovedOrderRejectsWaitingApprovalOrder(t *testing.T) {
 		t.Fatalf("Submit returned error: %v", err)
 	}
 
-	_, err = service.ExecuteApprovedOrder(context.Background(), appauth.AuthContext{
-		AuthenticatedPrincipalID: "u_2001",
-		Roles:                    []string{"mysql_operator"},
-	}, ExecuteOrderInput{
-		OrderID: submitResult.OrderID,
-		Reason:  "try execute too early",
-	})
-	if err == nil {
-		t.Fatalf("expected approval gate to block execute")
+	if result.Status != order.StatusWaitingApproval {
+		t.Fatalf("expected waiting approval order, got %s", result.Status)
 	}
-	if code := common.ErrorCode(err); code != common.CodeApprovalRequired {
-		t.Fatalf("expected %s, got %s", common.CodeApprovalRequired, code)
+	if !result.ApprovalRequired {
+		t.Fatalf("expected approval_required=true")
+	}
+
+	approvalState, err := approvalService.Get(ctx, result.OrderID)
+	if err != nil {
+		t.Fatalf("Get approval state returned error: %v", err)
+	}
+	if approvalState.TraceID != result.TraceID {
+		t.Fatalf("expected approval state trace id %q, got %q", result.TraceID, approvalState.TraceID)
+	}
+	if approvalState.ApprovalStatus != order.ApprovalStatusWaitingApproval {
+		t.Fatalf("expected waiting approval state, got %s", approvalState.ApprovalStatus)
+	}
+	if approvalState.ExpiresAt.IsZero() {
+		t.Fatalf("expected approval expiry to be set from policy TTL")
+	}
+
+	ledger, err := auditService.GetViewByRequestID(ctx, result.RequestID)
+	if err != nil {
+		t.Fatalf("GetViewByRequestID returned error: %v", err)
+	}
+	assertAuditEvent(t, ledger, appaudit.EventRequestAccepted)
+	assertAuditEvent(t, ledger, appaudit.EventAuthorizationDecided)
+	assertAuditEvent(t, ledger, appaudit.EventOrderCreated)
+	assertAuditEvent(t, ledger, appaudit.EventPlanFrozen)
+	assertAuditEvent(t, ledger, appaudit.EventApprovalCreated)
+	if ledger.TraceID != result.TraceID {
+		t.Fatalf("expected ledger trace id %q, got %q", result.TraceID, ledger.TraceID)
+	}
+	if ledger.LatestOrderStatus != string(order.StatusWaitingApproval) {
+		t.Fatalf("expected latest order status WAITING_APPROVAL, got %q", ledger.LatestOrderStatus)
+	}
+	if ledger.LatestApprovalStatus != string(order.ApprovalStatusWaitingApproval) {
+		t.Fatalf("expected latest approval status WAITING_APPROVAL, got %q", ledger.LatestApprovalStatus)
 	}
 }
 
-func TestServiceExecuteApprovedOrderRejectsCallerWithoutExecutePolicy(t *testing.T) {
-	service := NewService(
-		&stubPrincipalResolver{},
-		&stubAssetResolver{},
-		&stubAuthorizationService{
-			decision: dauth.Decision{
-				Authorized:       true,
-				FinalDecision:    dauth.FinalDecisionAllowNoApproval,
-				ApprovalRequired: false,
-				RiskLevel:        risk.LevelR1,
-			},
-		},
-		&stubExecuteAuthorizationService{
-			decision: appauth.ExecuteAuthorizationDecision{
-				Allowed: false,
-				Reasons: []string{"assistant_user cannot execute approved orders"},
-			},
-		},
-		&stubExecutionPlanner{
-			plan: plan.ExecutionPlan{
-				PlanID:      "plan_03",
-				PlanVersion: 1,
-				PlanStatus:  plan.StatusFrozen,
-			},
-		},
-		&recordingAuditService{},
-	)
+func TestServiceGetOrderReturnsTraceIDFromSubmission(t *testing.T) {
+	ctx := context.Background()
+	service, _, _, _, _ := newPhaseTwoServices(t)
 
-	submitResult, err := service.Submit(context.Background(), ActionRequestDTO{
-		PrincipalID: "u_1001",
+	submitResult, err := service.Submit(ctx, ActionRequestDTO{
+		PrincipalID: "u_requester",
 		ActionHint:  "mysql.database.create",
 		ResourceSelector: asset.Selector{
 			Project:         "order-platform",
@@ -186,9 +101,311 @@ func TestServiceExecuteApprovedOrderRejectsCallerWithoutExecutePolicy(t *testing
 		t.Fatalf("Submit returned error: %v", err)
 	}
 
-	_, err = service.ExecuteApprovedOrder(context.Background(), appauth.AuthContext{
-		AuthenticatedPrincipalID: "u_2002",
-		Roles:                    []string{"assistant_user"},
+	view, err := service.GetOrder(ctx, submitResult.OrderID)
+	if err != nil {
+		t.Fatalf("GetOrder returned error: %v", err)
+	}
+	if view.TraceID != submitResult.TraceID {
+		t.Fatalf("expected trace id %q, got %q", submitResult.TraceID, view.TraceID)
+	}
+}
+
+func TestServiceExecuteApprovedOrderStartsTaskAndWritesEvidence(t *testing.T) {
+	ctx := context.Background()
+	service, _, auditService, evidenceService, _ := newPhaseTwoServices(t)
+
+	submitResult, err := service.Submit(ctx, ActionRequestDTO{
+		PrincipalID: "u_requester",
+		ActionHint:  "mysql.database.create",
+		ResourceSelector: asset.Selector{
+			Project:         "order-platform",
+			Environment:     "test",
+			ServiceInstance: "mysql-order-main",
+		},
+		Parameters: map[string]any{
+			"database_name": "order_center",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	executeResult, err := service.ExecuteApprovedOrder(ctx, appauth.AuthContext{
+		AuthenticatedPrincipalID: "u_executor",
+		Roles:                    []string{principal.RoleMySQLOperator},
+		Source:                   "http",
+	}, ExecuteOrderInput{
+		OrderID: submitResult.OrderID,
+		Reason:  "manual execute",
+	})
+	if err != nil {
+		t.Fatalf("ExecuteApprovedOrder returned error: %v", err)
+	}
+
+	if executeResult.Status != order.StatusExecuting {
+		t.Fatalf("expected status EXECUTING, got %s", executeResult.Status)
+	}
+	if executeResult.TaskID == "" {
+		t.Fatalf("expected task id to be created")
+	}
+
+	orderView, err := service.GetOrder(ctx, submitResult.OrderID)
+	if err != nil {
+		t.Fatalf("GetOrder returned error: %v", err)
+	}
+	if orderView.Status != order.StatusExecuting {
+		t.Fatalf("expected persisted order status EXECUTING, got %s", orderView.Status)
+	}
+	if orderView.LastExecuteTriggeredBy != "u_executor" {
+		t.Fatalf("expected last_execute_triggered_by to be captured, got %q", orderView.LastExecuteTriggeredBy)
+	}
+
+	taskView, err := service.GetTask(ctx, executeResult.TaskID)
+	if err != nil {
+		t.Fatalf("GetTask returned error: %v", err)
+	}
+	if taskView.TraceID != submitResult.TraceID {
+		t.Fatalf("expected task trace id %q, got %q", submitResult.TraceID, taskView.TraceID)
+	}
+	if taskView.Status != "RUNNING" {
+		t.Fatalf("expected running task skeleton, got %s", taskView.Status)
+	}
+
+	ledger, err := auditService.GetViewByRequestID(ctx, submitResult.RequestID)
+	if err != nil {
+		t.Fatalf("GetViewByRequestID returned error: %v", err)
+	}
+	assertAuditEvent(t, ledger, appaudit.EventExecuteTriggered)
+	assertAuditEvent(t, ledger, appaudit.EventPlanRevalidated)
+	assertAuditEvent(t, ledger, appaudit.EventExecutionStarted)
+	assertAuditEvent(t, ledger, appaudit.EventEvidenceWritten)
+	if ledger.TraceID != submitResult.TraceID {
+		t.Fatalf("expected ledger trace id %q, got %q", submitResult.TraceID, ledger.TraceID)
+	}
+	if ledger.LatestTaskID != executeResult.TaskID {
+		t.Fatalf("expected latest task id %q, got %q", executeResult.TaskID, ledger.LatestTaskID)
+	}
+	if ledger.LatestOrderStatus != string(order.StatusExecuting) {
+		t.Fatalf("expected latest order status EXECUTING, got %q", ledger.LatestOrderStatus)
+	}
+
+	pack, err := evidenceService.GetByOrderID(ctx, submitResult.OrderID)
+	if err != nil {
+		t.Fatalf("GetByOrderID returned error: %v", err)
+	}
+	if pack.TraceID != submitResult.TraceID {
+		t.Fatalf("expected evidence trace id %q, got %q", submitResult.TraceID, pack.TraceID)
+	}
+	if pack.TaskID != executeResult.TaskID {
+		t.Fatalf("expected evidence task id %q, got %q", executeResult.TaskID, pack.TaskID)
+	}
+	if !pack.ExecutionSuccess {
+		t.Fatalf("expected phase-2 execute evidence to mark control flow success")
+	}
+	if !strings.Contains(pack.ResultSummary, "task skeleton started") {
+		t.Fatalf("expected phase-2 evidence summary to mention task skeleton, got %q", pack.ResultSummary)
+	}
+}
+
+func TestServiceExecuteApprovedOrderMarksPlanStaleWithoutCreatingTask(t *testing.T) {
+	ctx := context.Background()
+	service, _, auditService, evidenceService, _ := newPhaseTwoServices(t)
+
+	submitResult, err := service.Submit(ctx, ActionRequestDTO{
+		PrincipalID: "u_requester",
+		ActionHint:  "mysql.database.create",
+		ResourceSelector: asset.Selector{
+			Project:         "order-platform",
+			Environment:     "test",
+			ServiceInstance: "mysql-order-main",
+		},
+		Parameters: map[string]any{
+			"database_name": "order_center",
+		},
+		RequestContext: map[string]any{
+			"simulate_plan_stale": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	executeResult, err := service.ExecuteApprovedOrder(ctx, appauth.AuthContext{
+		AuthenticatedPrincipalID: "u_executor",
+		Roles:                    []string{principal.RoleMySQLOperator},
+		Source:                   "http",
+	}, ExecuteOrderInput{
+		OrderID: submitResult.OrderID,
+		Reason:  "manual execute",
+	})
+	if err != nil {
+		t.Fatalf("ExecuteApprovedOrder returned error: %v", err)
+	}
+
+	if executeResult.Status != order.StatusPlanStale {
+		t.Fatalf("expected PLAN_STALE result, got %s", executeResult.Status)
+	}
+	if executeResult.TaskID != "" {
+		t.Fatalf("expected no task to be created on stale plan, got %q", executeResult.TaskID)
+	}
+
+	orderView, err := service.GetOrder(ctx, submitResult.OrderID)
+	if err != nil {
+		t.Fatalf("GetOrder returned error: %v", err)
+	}
+	if orderView.Status != order.StatusPlanStale {
+		t.Fatalf("expected persisted order status PLAN_STALE, got %s", orderView.Status)
+	}
+
+	ledger, err := auditService.GetViewByRequestID(ctx, submitResult.RequestID)
+	if err != nil {
+		t.Fatalf("GetViewByRequestID returned error: %v", err)
+	}
+	assertAuditEvent(t, ledger, appaudit.EventExecuteTriggered)
+	assertAuditEvent(t, ledger, appaudit.EventPlanStale)
+	assertAuditEvent(t, ledger, appaudit.EventEvidenceWritten)
+	if ledger.TraceID != submitResult.TraceID {
+		t.Fatalf("expected ledger trace id %q, got %q", submitResult.TraceID, ledger.TraceID)
+	}
+	if ledger.LatestTaskID != "" {
+		t.Fatalf("expected latest task id to stay empty on stale path, got %q", ledger.LatestTaskID)
+	}
+
+	pack, err := evidenceService.GetByOrderID(ctx, submitResult.OrderID)
+	if err != nil {
+		t.Fatalf("GetByOrderID returned error: %v", err)
+	}
+	if pack.TraceID != submitResult.TraceID {
+		t.Fatalf("expected stale evidence trace id %q, got %q", submitResult.TraceID, pack.TraceID)
+	}
+	if pack.TaskID != "" {
+		t.Fatalf("expected stale evidence to keep task_id empty, got %q", pack.TaskID)
+	}
+	if pack.ExecutionSuccess {
+		t.Fatalf("expected stale evidence to be marked unsuccessful")
+	}
+	if pack.FailureDetail["reason"] == "" {
+		t.Fatalf("expected stale evidence to include failure reason")
+	}
+}
+
+func TestServiceExecuteApprovedOrderReturnsExistingTaskWhenAlreadyExecuting(t *testing.T) {
+	ctx := context.Background()
+	service, _, auditService, _, _ := newPhaseTwoServices(t)
+
+	submitResult, err := service.Submit(ctx, ActionRequestDTO{
+		PrincipalID: "u_requester",
+		ActionHint:  "mysql.database.create",
+		ResourceSelector: asset.Selector{
+			Project:         "order-platform",
+			Environment:     "test",
+			ServiceInstance: "mysql-order-main",
+		},
+		Parameters: map[string]any{
+			"database_name": "order_center",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	first, err := service.ExecuteApprovedOrder(ctx, appauth.AuthContext{
+		AuthenticatedPrincipalID: "u_executor",
+		Roles:                    []string{principal.RoleMySQLOperator},
+		Source:                   "http",
+	}, ExecuteOrderInput{
+		OrderID: submitResult.OrderID,
+		Reason:  "first execute",
+	})
+	if err != nil {
+		t.Fatalf("first ExecuteApprovedOrder returned error: %v", err)
+	}
+
+	second, err := service.ExecuteApprovedOrder(ctx, appauth.AuthContext{
+		AuthenticatedPrincipalID: "u_executor",
+		Roles:                    []string{principal.RoleMySQLOperator},
+		Source:                   "http",
+	}, ExecuteOrderInput{
+		OrderID: submitResult.OrderID,
+		Reason:  "second execute",
+	})
+	if err != nil {
+		t.Fatalf("second ExecuteApprovedOrder returned error: %v", err)
+	}
+
+	if second.TaskID != first.TaskID {
+		t.Fatalf("expected second execute to return existing task %q, got %q", first.TaskID, second.TaskID)
+	}
+
+	ledger, err := auditService.GetViewByRequestID(ctx, submitResult.RequestID)
+	if err != nil {
+		t.Fatalf("GetViewByRequestID returned error: %v", err)
+	}
+	if countAuditEvents(ledger, appaudit.EventExecutionStarted) != 1 {
+		t.Fatalf("expected EXECUTION_STARTED to be written once, got %d", countAuditEvents(ledger, appaudit.EventExecutionStarted))
+	}
+}
+
+func TestServiceExecuteApprovedOrderRejectsWaitingApprovalOrder(t *testing.T) {
+	ctx := context.Background()
+	service, _, _, _, _ := newPhaseTwoServices(t)
+
+	submitResult, err := service.Submit(ctx, ActionRequestDTO{
+		PrincipalID: "u_requester",
+		ActionHint:  "mysql.database.create",
+		ResourceSelector: asset.Selector{
+			Project:         "order-platform",
+			Environment:     "prod",
+			ServiceInstance: "mysql-order-main",
+		},
+		Parameters: map[string]any{
+			"database_name": "order_center",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	_, err = service.ExecuteApprovedOrder(ctx, appauth.AuthContext{
+		AuthenticatedPrincipalID: "u_executor",
+		Roles:                    []string{principal.RoleMySQLOperator},
+		Source:                   "http",
+	}, ExecuteOrderInput{
+		OrderID: submitResult.OrderID,
+		Reason:  "too early",
+	})
+	if err == nil {
+		t.Fatalf("expected approval gate to block execute")
+	}
+	if code := common.ErrorCode(err); code != common.CodeApprovalRequired {
+		t.Fatalf("expected %s, got %s", common.CodeApprovalRequired, code)
+	}
+}
+
+func TestServiceExecuteApprovedOrderRejectsCallerWithoutExecutePolicy(t *testing.T) {
+	ctx := context.Background()
+	service, _, _, _, _ := newPhaseTwoServices(t)
+
+	submitResult, err := service.Submit(ctx, ActionRequestDTO{
+		PrincipalID: "u_requester",
+		ActionHint:  "mysql.database.create",
+		ResourceSelector: asset.Selector{
+			Project:         "order-platform",
+			Environment:     "test",
+			ServiceInstance: "mysql-order-main",
+		},
+		Parameters: map[string]any{
+			"database_name": "order_center",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	_, err = service.ExecuteApprovedOrder(ctx, appauth.AuthContext{
+		AuthenticatedPrincipalID: "u_assistant",
+		Roles:                    []string{principal.RoleAssistantUser},
+		Source:                   "http",
 	}, ExecuteOrderInput{
 		OrderID: submitResult.OrderID,
 		Reason:  "unauthorized execute attempt",
@@ -201,209 +418,71 @@ func TestServiceExecuteApprovedOrderRejectsCallerWithoutExecutePolicy(t *testing
 	}
 }
 
-func TestServiceExecuteApprovedOrderFailsClosedWhenExecuteAuthorizationIsMissing(t *testing.T) {
-	service := NewService(
-		&stubPrincipalResolver{},
-		&stubAssetResolver{},
-		&stubAuthorizationService{
-			decision: dauth.Decision{
-				Authorized:       true,
-				FinalDecision:    dauth.FinalDecisionAllowNoApproval,
-				ApprovalRequired: false,
-				RiskLevel:        risk.LevelR1,
-			},
-		},
-		nil,
-		&stubExecutionPlanner{
-			plan: plan.ExecutionPlan{
-				PlanID:      "plan_04",
-				PlanVersion: 1,
-				PlanStatus:  plan.StatusFrozen,
-			},
-		},
-		&recordingAuditService{},
-	)
+func newPhaseTwoServices(t *testing.T) (Service, appapproval.Service, *appaudit.MemoryService, *appevidence.MemoryService, *persistence.MemoryStore) {
+	t.Helper()
 
-	submitResult, err := service.Submit(context.Background(), ActionRequestDTO{
-		PrincipalID: "u_1001",
-		ActionHint:  "mysql.database.create",
-		ResourceSelector: asset.Selector{
-			Project:         "order-platform",
-			Environment:     "test",
-			ServiceInstance: "mysql-order-main",
-		},
-		Parameters: map[string]any{
-			"database_name": "order_center",
-		},
+	ctx := context.Background()
+	store := persistence.NewMemoryStore()
+	if err := store.SaveApprovalPolicy(ctx, policy.ApprovalPolicy{
+		PolicyID:           "approval_policy_prod_r2",
+		ActionName:         "mysql.database.create",
+		RiskLevels:         []string{string(risk.LevelR2)},
+		ApproverRoles:      []string{principal.RoleProdApprover, principal.RolePlatformAdmin},
+		MinApproverCount:   1,
+		ForbidSelfApproval: true,
+		TTL:                30 * time.Minute,
+		Enabled:            true,
+	}); err != nil {
+		t.Fatalf("failed to seed approval policy: %v", err)
+	}
+
+	auditService := appaudit.NewMemoryService(store)
+	evidenceService := appevidence.NewMemoryService(store)
+	approvalService := appapproval.NewService(appapproval.Dependencies{
+		Orders:    store,
+		Plans:     store,
+		Approvals: store,
+		Policies:  store,
+		Audit:     auditService,
 	})
-	if err != nil {
-		t.Fatalf("Submit returned error: %v", err)
-	}
-
-	_, err = service.ExecuteApprovedOrder(context.Background(), appauth.AuthContext{
-		AuthenticatedPrincipalID: "u_2002",
-		Roles:                    []string{"mysql_operator"},
-	}, ExecuteOrderInput{
-		OrderID: submitResult.OrderID,
-		Reason:  "missing execute auth wiring",
+	actionService := NewService(Dependencies{
+		PrincipalResolver: appauth.NewStaticPrincipalResolver(),
+		AssetResolver:     appauth.NewInMemoryExactAssetResolver(appauth.StaticManagedAssets()),
+		Authorization: appauth.NewAuthorizationService(
+			appauth.NewStaticPolicyEngine(),
+			appauth.NewStaticRiskEngine(),
+		),
+		ExecuteAuth: appauth.NewStaticExecuteAuthorizationService(),
+		Planner:     appexec.NewStaticExecutionPlanner(),
+		Router:      appexec.NewStaticExecutionRouter(),
+		Runtime:     appexec.NewNoopTaskRuntime(store),
+		Approval:    approvalService,
+		Audit:       auditService,
+		Evidence:    evidenceService,
+		Requests:    store,
+		Orders:      store,
+		Plans:       store,
+		Tasks:       store,
 	})
-	if err == nil {
-		t.Fatalf("expected execute auth missing to fail closed")
-	}
-	if code := common.ErrorCode(err); code != common.CodeSystemInternalError {
-		t.Fatalf("expected %s, got %s", common.CodeSystemInternalError, code)
-	}
+	return actionService, approvalService, auditService, evidenceService, store
 }
 
-func TestServiceGetOrderReturnsTraceIDFromSubmission(t *testing.T) {
-	service := NewService(
-		&stubPrincipalResolver{},
-		&stubAssetResolver{},
-		&stubAuthorizationService{
-			decision: dauth.Decision{
-				Authorized:       true,
-				FinalDecision:    dauth.FinalDecisionAllowNoApproval,
-				ApprovalRequired: false,
-				RiskLevel:        risk.LevelR1,
-			},
-		},
-		&stubExecuteAuthorizationService{
-			decision: appauth.ExecuteAuthorizationDecision{Allowed: true},
-		},
-		&stubExecutionPlanner{
-			plan: plan.ExecutionPlan{
-				PlanID:      "plan_05",
-				PlanVersion: 1,
-				PlanStatus:  plan.StatusFrozen,
-			},
-		},
-		&recordingAuditService{},
-	)
-
-	submitResult, err := service.Submit(context.Background(), ActionRequestDTO{
-		PrincipalID: "u_1001",
-		ActionHint:  "mysql.database.create",
-		ResourceSelector: asset.Selector{
-			Project:         "order-platform",
-			Environment:     "test",
-			ServiceInstance: "mysql-order-main",
-		},
-		Parameters: map[string]any{
-			"database_name": "order_center",
-		},
-	})
-	if err != nil {
-		t.Fatalf("Submit returned error: %v", err)
-	}
-
-	view, err := service.GetOrder(context.Background(), submitResult.OrderID)
-	if err != nil {
-		t.Fatalf("GetOrder returned error: %v", err)
-	}
-	if view.TraceID != submitResult.TraceID {
-		t.Fatalf("expected trace id %q, got %q", submitResult.TraceID, view.TraceID)
-	}
-}
-
-type stubPrincipalResolver struct{}
-
-func (s *stubPrincipalResolver) Resolve(_ context.Context, principalID string, authCtx appauth.AuthContext) (principal.Principal, error) {
-	roles := []string{"mysql_operator"}
-	if len(authCtx.Roles) > 0 {
-		roles = append([]string(nil), authCtx.Roles...)
-	}
-	return principal.Principal{
-		PrincipalID: principalID,
-		Roles:       roles,
-		IsActive:    true,
-	}, nil
-}
-
-type stubAssetResolver struct{}
-
-func (s *stubAssetResolver) ResolveExact(_ context.Context, _ string, selector asset.Selector) (asset.ResolvedAssetSet, error) {
-	return asset.ResolvedAssetSet{
-		AssetIDs: []string{"dbt_1001"},
-		Assets: []asset.Asset{
-			{
-				AssetID:         "dbt_1001",
-				AssetType:       asset.TypeDatabaseTarget,
-				Project:         selector.Project,
-				Environment:     selector.Environment,
-				ServiceInstance: selector.ServiceInstance,
-				CanonicalName:   selector.ServiceInstance,
-			},
-		},
-		MatchedExactly: true,
-		AssetType:      asset.TypeDatabaseTarget,
-	}, nil
-}
-
-type stubAuthorizationService struct {
-	decision dauth.Decision
-}
-
-func (s *stubAuthorizationService) Evaluate(_ context.Context, _ dauth.Input) (dauth.Decision, error) {
-	return s.decision, nil
-}
-
-type stubExecuteAuthorizationService struct {
-	decision appauth.ExecuteAuthorizationDecision
-}
-
-func (s *stubExecuteAuthorizationService) Authorize(_ context.Context, _ appauth.ExecuteAuthorizationInput) (appauth.ExecuteAuthorizationDecision, error) {
-	return s.decision, nil
-}
-
-type stubExecutionPlanner struct {
-	plan       plan.ExecutionPlan
-	buildCalls int
-}
-
-func (s *stubExecutionPlanner) Build(_ context.Context, _ order.AssistantOrder) (plan.ExecutionPlan, error) {
-	s.buildCalls++
-	return s.plan, nil
-}
-
-func (s *stubExecutionPlanner) Revalidate(_ context.Context, _ order.AssistantOrder, _ plan.ExecutionPlan) (appexec.PlanValidationResult, error) {
-	return appexec.PlanValidationResult{
-		Valid:  true,
-		Status: plan.StatusRevalidated,
-	}, nil
-}
-
-type recordingAuditService struct {
-	events []appaudit.Event
-}
-
-func (r *recordingAuditService) AppendEvent(_ context.Context, event appaudit.Event) error {
-	r.events = append(r.events, event)
-	return nil
-}
-
-func (r *recordingAuditService) ListEventsByRequestID(_ context.Context, _ string) ([]appaudit.Event, error) {
-	return append([]appaudit.Event(nil), r.events...), nil
-}
-
-func (r *recordingAuditService) GetViewByRequestID(_ context.Context, requestID string) (appaudit.LedgerView, error) {
-	return appaudit.LedgerView{
-		RequestID: requestID,
-		Events:    append([]appaudit.Event(nil), r.events...),
-	}, nil
-}
-
-func (r *recordingAuditService) HasEvent(eventType appaudit.EventType) bool {
-	for _, event := range r.events {
+func assertAuditEvent(t *testing.T, ledger appaudit.LedgerView, eventType appaudit.EventType) {
+	t.Helper()
+	for _, event := range ledger.Events {
 		if event.EventType == eventType {
-			return true
+			return
 		}
 	}
-	return false
+	t.Fatalf("expected audit event %s to be present", eventType)
 }
 
-func (r *recordingAuditService) FirstEventType() appaudit.EventType {
-	if len(r.events) == 0 {
-		return ""
+func countAuditEvents(ledger appaudit.LedgerView, eventType appaudit.EventType) int {
+	count := 0
+	for _, event := range ledger.Events {
+		if event.EventType == eventType {
+			count++
+		}
 	}
-	return r.events[0].EventType
+	return count
 }

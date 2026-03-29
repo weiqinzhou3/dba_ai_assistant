@@ -3,12 +3,15 @@ package actionrequest
 import (
 	"context"
 
+	appapproval "dba_ai_assistant/internal/application/approval"
 	appaudit "dba_ai_assistant/internal/application/audit"
 	appauth "dba_ai_assistant/internal/application/authorization"
+	appevidence "dba_ai_assistant/internal/application/evidence"
 	appexec "dba_ai_assistant/internal/application/execution"
 	"dba_ai_assistant/internal/domain/action"
 	"dba_ai_assistant/internal/domain/asset"
 	"dba_ai_assistant/internal/domain/order"
+	"dba_ai_assistant/internal/domain/plan"
 	"dba_ai_assistant/internal/domain/task"
 )
 
@@ -57,11 +60,40 @@ type Service interface {
 
 type ActionRequestService = Service
 
+type requestRepository interface {
+	SaveRequest(ctx context.Context, request action.Request) error
+	GetRequest(ctx context.Context, requestID string) (action.Request, error)
+}
+
+type orderRepository interface {
+	SaveOrder(ctx context.Context, ord order.AssistantOrder) error
+	GetOrder(ctx context.Context, orderID string) (order.AssistantOrder, error)
+}
+
+type planRepository interface {
+	SavePlan(ctx context.Context, executionPlan plan.ExecutionPlan) error
+	GetPlanByOrderID(ctx context.Context, orderID string) (plan.ExecutionPlan, error)
+}
+
+type taskRepository interface {
+	SaveTask(ctx context.Context, executionTask task.ExecutionTask) error
+	GetTask(ctx context.Context, taskID string) (task.ExecutionTask, error)
+	GetTaskByOrderID(ctx context.Context, orderID string) (task.ExecutionTask, error)
+}
+
 type Dependencies struct {
 	PrincipalResolver appauth.PrincipalResolver
 	AssetResolver     appauth.AssetResolver
 	Authorization     appauth.AuthorizationService
 	ExecuteAuth       appauth.ExecuteAuthorizationService
 	Planner           appexec.ExecutionPlanner
+	Router            appexec.ExecutionRouter
+	Runtime           appexec.TaskRuntime
+	Approval          appapproval.Service
 	Audit             appaudit.Service
+	Evidence          appevidence.Service
+	Requests          requestRepository
+	Orders            orderRepository
+	Plans             planRepository
+	Tasks             taskRepository
 }
