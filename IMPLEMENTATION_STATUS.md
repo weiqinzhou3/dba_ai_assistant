@@ -163,4 +163,5 @@
 ## 验证记录
 
 - reviewed branch `feat/p1-baseline-gap-and-guardrails` 已在 Claude review 中确认：`go test ./...` 全部通过
+- `docs/phase-01-closeout-v2` 已于 2026-03-29 fresh 执行 `go test ./...` 并通过
 - 本轮 closeout-v2 只重放文档与状态收口，不新增业务代码

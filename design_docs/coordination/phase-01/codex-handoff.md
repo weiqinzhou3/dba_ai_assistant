@@ -38,6 +38,6 @@
   - `design_docs/coordination/phase-01/codex-status.md`
 - 发布元数据：
   - 新分支名：`docs/phase-01-closeout-v2`
-  - commit SHA：待本轮提交后补记
-  - 新 PR 链接：待创建后补记
-  - 是否建议关闭旧 PR #2：待新 PR 创建并确认内容完整后补记
+  - closeout commit SHA：`184fc9c86900f07a6467ab1248ea44de1f0af091`
+  - 新 PR：[#4](https://github.com/weiqinzhou3/dba_ai_assistant/pull/4)
+  - 是否建议关闭旧 PR #2：是。建议在确认 PR #4 内容完整后，将 PR #2 作为 superseded closeout PR 关闭
