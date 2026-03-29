@@ -2,12 +2,13 @@
 
 ## 当前阶段结论
 
-- Phase 02 已完成 review closeout，并被标记为 `accepted`。
-- Phase 03 `mysql.database.create` MVP 已完成 Codex 实现并进入 `awaiting_review`。
-- 当前系统已能通过 HTTP API 走通 request / approval / execute / audit / evidence 的真实 `mysql.database.create` 最小闭环。
-- 当前系统已首次完成真实 `DBNativeAdapter` southbound 执行，但仍只覆盖 `mysql.database.create`。
-- `ready_for_next_phase = false`
-- `next_phase = phase-03-review`
+- Phase 03 已完成 review closeout，并被标记为 `accepted`。
+- Phase 03 closeout 已完成；本轮只做文档与仓库状态同步，不进入 Phase 04 实施。
+- 当前系统已具备 `mysql.database.create` 的最小真实纵切：HTTP API 可走通 request / approval / execute / audit / evidence 的真实闭环。
+- 当前系统已完成真实 `DBNativeAdapter` southbound 执行，但仍严格只覆盖 `mysql.database.create`。
+- `ready_for_next_phase = true`
+- `next_phase = phase-04`
+- 下一阶段为 Phase 04：Deep Agent 接入（尚未开始）
 - `main_cleanup_verification = completed` — main 与 origin/main 完全对齐 (`547e23c`)，工作区干净，`go test ./...` 全部通过，Phase 03 改动也已 fresh 执行 `go test ./...` 通过。
 
 ## 已完成
@@ -191,10 +192,10 @@
 
 ## 下一阶段准备做什么
 
-1. 先完成 Phase 03 review / closeout，确认真实 southbound、幂等与证据语义都被接受。
-2. 再决定是否进入 Phase 04 Deep Agent 接入。
+1. Phase 03 review / closeout 已完成，当前仓库状态允许进入下一阶段，但本轮未进入 Phase 04 实施。
+2. 下一阶段目标为 Phase 04：Deep Agent 接入。
 3. 若继续打磨控制层本体，优先把 approval actor 从“认证上下文优先”收紧到“只信任认证上下文”。
-4. 把当前内存型 idempotency / audit / evidence / repository 切到持久化实现。
+4. 把当前内存型 idempotency / audit / evidence / repository 逐步切到持久化实现。
 
 ## 当前架构风险与待确认点
 
