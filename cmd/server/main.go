@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"dba_ai_assistant/internal/adapters/dbnative"
 	"dba_ai_assistant/internal/api"
 	appaction "dba_ai_assistant/internal/application/actionrequest"
 	"dba_ai_assistant/internal/application/approval"
@@ -43,8 +44,8 @@ func main() {
 		),
 		ExecuteAuth: appauth.NewStaticExecuteAuthorizationService(),
 		Planner:     appexec.NewStaticExecutionPlanner(),
-		Router:      appexec.NewStaticExecutionRouter(),
-		Runtime:     appexec.NewNoopTaskRuntime(store),
+		Router:      appexec.NewStaticExecutionRouter(dbnative.New(dbnative.Dependencies{})),
+		Runtime:     appexec.NewSynchronousTaskRuntime(store),
 		Approval:    approvalService,
 		Audit:       auditService,
 		Evidence:    evidenceService,
@@ -52,6 +53,7 @@ func main() {
 		Orders:      store,
 		Plans:       store,
 		Tasks:       store,
+		Idempotency: store,
 	})
 
 	server := api.NewServer(api.Dependencies{

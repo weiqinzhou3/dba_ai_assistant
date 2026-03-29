@@ -7,6 +7,7 @@ import (
 	"dba_ai_assistant/internal/application/approval"
 	"dba_ai_assistant/internal/application/audit"
 	"dba_ai_assistant/internal/application/evidence"
+	appexec "dba_ai_assistant/internal/application/execution"
 	"dba_ai_assistant/internal/domain/action"
 	"dba_ai_assistant/internal/domain/common"
 	"dba_ai_assistant/internal/domain/order"
@@ -30,6 +31,7 @@ type MemoryStore struct {
 
 	auditEvents          []audit.Event
 	evidencePacksByOrder map[string]evidence.Pack
+	idempotencyByKey     map[string]appexec.IdempotencyRecord
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -41,6 +43,7 @@ func NewMemoryStore() *MemoryStore {
 		taskIDByOrderID:         map[string]string{},
 		approvalStatesByOrderID: map[string]approval.State{},
 		evidencePacksByOrder:    map[string]evidence.Pack{},
+		idempotencyByKey:        map[string]appexec.IdempotencyRecord{},
 	}
 }
 
@@ -256,6 +259,25 @@ func (s *MemoryStore) GetEvidencePackByOrderID(_ context.Context, orderID string
 	return cloneEvidencePack(pack), nil
 }
 
+func (s *MemoryStore) SaveIdempotencyRecord(_ context.Context, record appexec.IdempotencyRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.idempotencyByKey[record.IdempotencyKey] = cloneIdempotencyRecord(record)
+	return nil
+}
+
+func (s *MemoryStore) GetIdempotencyRecord(_ context.Context, key string) (appexec.IdempotencyRecord, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	record, ok := s.idempotencyByKey[key]
+	if !ok {
+		return appexec.IdempotencyRecord{}, false, nil
+	}
+	return cloneIdempotencyRecord(record), true, nil
+}
+
 func cloneRequest(request action.Request) action.Request {
 	request.Parameters = cloneMap(request.Parameters)
 	request.RequestContext = cloneMap(request.RequestContext)
@@ -290,6 +312,19 @@ func cloneEvidencePack(pack evidence.Pack) evidence.Pack {
 	pack.AfterStateSnapshot = cloneMap(pack.AfterStateSnapshot)
 	pack.FailureDetail = cloneMap(pack.FailureDetail)
 	return pack
+}
+
+func cloneIdempotencyRecord(record appexec.IdempotencyRecord) appexec.IdempotencyRecord {
+	record.Outputs = cloneMap(record.Outputs)
+	record.Error = cloneMap(record.Error)
+	if len(record.Artifacts) > 0 {
+		cloned := make([]map[string]any, 0, len(record.Artifacts))
+		for _, artifact := range record.Artifacts {
+			cloned = append(cloned, cloneMap(artifact))
+		}
+		record.Artifacts = cloned
+	}
+	return record
 }
 
 func cloneMap(input map[string]any) map[string]any {

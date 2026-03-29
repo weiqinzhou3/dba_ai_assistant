@@ -19,7 +19,7 @@ type ExecutionRouter interface {
 }
 
 type TaskRuntime interface {
-	Start(ctx context.Context, order order.AssistantOrder, plan plan.ExecutionPlan) (task.ExecutionTask, error)
+	Start(ctx context.Context, input TaskStartInput) (TaskStartResult, error)
 	Get(ctx context.Context, taskID string) (task.ExecutionTask, error)
 }
 
@@ -30,8 +30,9 @@ type PlanValidationResult struct {
 }
 
 type AdapterBinding struct {
-	AdapterType string `json:"adapter_type"`
-	RouteName   string `json:"route_name"`
+	AdapterType string  `json:"adapter_type"`
+	RouteName   string  `json:"route_name"`
+	Adapter     Adapter `json:"-"`
 }
 
 type AdapterType string
@@ -86,4 +87,34 @@ type AdapterExecutionResult struct {
 	StartedAt       time.Time        `json:"started_at,omitempty"`
 	EndedAt         time.Time        `json:"ended_at,omitempty"`
 	Error           map[string]any   `json:"error,omitempty"`
+}
+
+type TaskStartInput struct {
+	Order          order.AssistantOrder `json:"order"`
+	Plan           plan.ExecutionPlan   `json:"plan"`
+	Binding        AdapterBinding       `json:"binding"`
+	AdapterRequest AdapterExecutionRequest
+}
+
+type TaskStartResult struct {
+	Task           task.ExecutionTask      `json:"task"`
+	AdapterRequest AdapterExecutionRequest `json:"adapter_request"`
+	AdapterResult  AdapterExecutionResult  `json:"adapter_result"`
+}
+
+type IdempotencyRecord struct {
+	IdempotencyKey string           `json:"idempotency_key"`
+	OrderID        string           `json:"order_id"`
+	TaskID         string           `json:"task_id,omitempty"`
+	TaskStatus     task.Status      `json:"task_status"`
+	Summary        string           `json:"summary,omitempty"`
+	Outputs        map[string]any   `json:"outputs,omitempty"`
+	Artifacts      []map[string]any `json:"artifacts,omitempty"`
+	Error          map[string]any   `json:"error,omitempty"`
+	UpdatedAt      time.Time        `json:"updated_at,omitempty"`
+}
+
+type IdempotencyRepository interface {
+	SaveIdempotencyRecord(ctx context.Context, record IdempotencyRecord) error
+	GetIdempotencyRecord(ctx context.Context, key string) (IdempotencyRecord, bool, error)
 }

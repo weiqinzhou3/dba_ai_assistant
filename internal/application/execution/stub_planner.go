@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"dba_ai_assistant/internal/domain/common"
 	"dba_ai_assistant/internal/domain/order"
 	"dba_ai_assistant/internal/domain/plan"
 	"dba_ai_assistant/internal/domain/task"
@@ -59,21 +60,42 @@ func (p *StaticExecutionPlanner) Revalidate(_ context.Context, _ order.Assistant
 	}, nil
 }
 
-type StaticExecutionRouter struct{}
-
-func NewStaticExecutionRouter() *StaticExecutionRouter {
-	return &StaticExecutionRouter{}
+type StaticExecutionRouter struct {
+	adapters map[AdapterType]Adapter
 }
 
-func (r *StaticExecutionRouter) Route(_ context.Context, _ plan.ExecutionPlan) (AdapterBinding, error) {
+func NewStaticExecutionRouter(adapters ...Adapter) *StaticExecutionRouter {
+	indexed := make(map[AdapterType]Adapter, len(adapters))
+	for _, adapter := range adapters {
+		if adapter == nil {
+			continue
+		}
+		indexed[adapter.Type()] = adapter
+	}
+	return &StaticExecutionRouter{adapters: indexed}
+}
+
+func (r *StaticExecutionRouter) Route(_ context.Context, executionPlan plan.ExecutionPlan) (AdapterBinding, error) {
+	adapterType := AdapterTypeDBNative
+	if executionPlan.SelectedRoute != "" {
+		adapterType = AdapterType(executionPlan.SelectedRoute)
+	}
+	adapter, ok := r.adapters[adapterType]
+	if !ok {
+		return AdapterBinding{}, common.NewError(common.CodeAdapterNotAvailable, "execution router could not find a bound adapter", map[string]any{
+			"adapter_type": adapterType,
+		})
+	}
 	return AdapterBinding{
-		AdapterType: string(AdapterTypeDBNative),
+		AdapterType: string(adapterType),
 		RouteName:   "db_native/mysql",
+		Adapter:     adapter,
 	}, nil
 }
 
-type NoopTaskRuntime struct {
+type SynchronousTaskRuntime struct {
 	tasks taskRepository
+	now   func() time.Time
 }
 
 type taskRepository interface {
@@ -81,24 +103,89 @@ type taskRepository interface {
 	GetTask(ctx context.Context, taskID string) (task.ExecutionTask, error)
 }
 
-func NewNoopTaskRuntime(tasks taskRepository) *NoopTaskRuntime {
-	return &NoopTaskRuntime{tasks: tasks}
+func NewSynchronousTaskRuntime(tasks taskRepository) *SynchronousTaskRuntime {
+	return &SynchronousTaskRuntime{
+		tasks: tasks,
+		now: func() time.Time {
+			return time.Now().UTC()
+		},
+	}
 }
 
-func (r *NoopTaskRuntime) Start(ctx context.Context, ord order.AssistantOrder, _ plan.ExecutionPlan) (task.ExecutionTask, error) {
-	now := time.Now().UTC()
-	created := task.ExecutionTask{
-		TaskID:      "task_" + ord.OrderID,
-		OrderID:     ord.OrderID,
-		TraceID:     ord.TraceID,
-		ActionName:  ord.ActionName,
+func NewNoopTaskRuntime(tasks taskRepository) *SynchronousTaskRuntime {
+	return NewSynchronousTaskRuntime(tasks)
+}
+
+func (r *SynchronousTaskRuntime) Start(ctx context.Context, input TaskStartInput) (TaskStartResult, error) {
+	if input.Binding.Adapter == nil {
+		return TaskStartResult{}, common.NewError(common.CodeAdapterNotAvailable, "task runtime received nil adapter binding", map[string]any{
+			"order_id": input.Order.OrderID,
+		})
+	}
+
+	now := r.now()
+	taskID := input.AdapterRequest.TaskID
+	if taskID == "" {
+		taskID = "task_" + input.Order.OrderID
+	}
+
+	executionTask := task.ExecutionTask{
+		TaskID:      taskID,
+		OrderID:     input.Order.OrderID,
+		TraceID:     input.Order.TraceID,
+		ActionName:  input.Order.ActionName,
 		Status:      task.StatusRunning,
 		StartedAt:   now,
 		HeartbeatAt: now,
 	}
-	return created, r.tasks.SaveTask(ctx, created)
+	if err := r.tasks.SaveTask(ctx, executionTask); err != nil {
+		return TaskStartResult{}, err
+	}
+
+	req := input.AdapterRequest
+	req.TaskID = taskID
+	result, err := input.Binding.Adapter.Execute(ctx, req)
+	if err != nil {
+		executionTask.Status = task.StatusFailed
+		executionTask.EndedAt = r.now()
+		executionTask.HeartbeatAt = executionTask.EndedAt
+		if saveErr := r.tasks.SaveTask(ctx, executionTask); saveErr != nil {
+			return TaskStartResult{}, saveErr
+		}
+		return TaskStartResult{
+			Task:           executionTask,
+			AdapterRequest: req,
+		}, err
+	}
+
+	if result.StartedAt.IsZero() {
+		result.StartedAt = executionTask.StartedAt
+	}
+	if result.EndedAt.IsZero() {
+		result.EndedAt = r.now()
+	}
+
+	switch result.Status {
+	case "SUCCEEDED":
+		executionTask.Status = task.StatusSucceeded
+	case "TIMEOUT":
+		executionTask.Status = task.StatusTimeout
+	default:
+		executionTask.Status = task.StatusFailed
+	}
+	executionTask.EndedAt = result.EndedAt
+	executionTask.HeartbeatAt = result.EndedAt
+	if err := r.tasks.SaveTask(ctx, executionTask); err != nil {
+		return TaskStartResult{}, err
+	}
+
+	return TaskStartResult{
+		Task:           executionTask,
+		AdapterRequest: req,
+		AdapterResult:  result,
+	}, nil
 }
 
-func (r *NoopTaskRuntime) Get(ctx context.Context, taskID string) (task.ExecutionTask, error) {
+func (r *SynchronousTaskRuntime) Get(ctx context.Context, taskID string) (task.ExecutionTask, error) {
 	return r.tasks.GetTask(ctx, taskID)
 }

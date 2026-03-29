@@ -92,6 +92,17 @@ func (s *Server) handleDecideApproval(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r.Context(), common.NewError(common.CodeRequestInvalid, "invalid request body", nil), "")
 		return
 	}
+	authCtx := authContextFromRequest(r)
+	if authCtx.AuthenticatedPrincipalID != "" {
+		if req.ApproverID != "" && req.ApproverID != authCtx.AuthenticatedPrincipalID {
+			writeError(w, r.Context(), common.NewError(common.CodeRequestInvalid, "approver_id does not match authenticated principal", map[string]any{
+				"approver_id":                req.ApproverID,
+				"authenticated_principal_id": authCtx.AuthenticatedPrincipalID,
+			}), "")
+			return
+		}
+		req.ApproverID = authCtx.AuthenticatedPrincipalID
+	}
 
 	result, err := s.approvals.Decide(r.Context(), r.PathValue("order_id"), req)
 	if err != nil {
@@ -188,7 +199,7 @@ func writeError(w http.ResponseWriter, _ context.Context, err error, traceID str
 	switch common.ErrorCode(err) {
 	case common.CodeRequestInvalid:
 		status = http.StatusBadRequest
-	case common.CodeApprovalRequired, common.CodeOrderNotExecutable, common.CodeOrderAlreadyExecuted, common.CodePlanStale:
+	case common.CodeApprovalRequired, common.CodeOrderNotExecutable, common.CodeOrderAlreadyExecuted, common.CodePlanStale, common.CodeIdempotencyConflict:
 		status = http.StatusConflict
 	case common.CodeActionNotAllowed, common.CodeScopeDenied, common.CodeExecutorNotAllowed, common.CodeApprovalRejected, common.CodeSelfApprovalForbidden:
 		status = http.StatusForbidden

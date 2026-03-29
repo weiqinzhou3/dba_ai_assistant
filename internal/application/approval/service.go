@@ -110,6 +110,9 @@ func (s *service) Decide(ctx context.Context, orderID string, decision DecisionI
 	if state.ApprovalStatus != order.ApprovalStatusWaitingApproval || ord.Status != order.StatusWaitingApproval {
 		return State{}, common.NewError(common.CodeOrderNotExecutable, "approval state does not allow decision", map[string]any{"order_id": orderID})
 	}
+	if decision.ApproverID == "" {
+		return State{}, common.NewError(common.CodeRequestInvalid, "approver_id is required", map[string]any{"order_id": orderID})
+	}
 	if decision.ApproverID == ord.CreatedBy {
 		return State{}, common.NewError(common.CodeSelfApprovalForbidden, "self approval is forbidden", map[string]any{"order_id": orderID})
 	}
