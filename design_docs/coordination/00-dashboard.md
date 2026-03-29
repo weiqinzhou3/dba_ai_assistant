@@ -13,6 +13,16 @@
 
 ## 当前总览
 
+## Phase 00.5 Closeout
+
+| Stage | 目标摘要 | 状态 | 当前分支 | Baseline | Codex Patch | Claude Review | Merge Summary | Gate |
+|---|---|---|---|---|---|---|---|---|
+| Phase 00.5 | 路线图、协作协议与现有代码基线收口 | accepted | `docs/phase-00.5-closeout` | [../21-current-codebase-baseline-v0.1.md](../21-current-codebase-baseline-v0.1.md) | [phase-00.5-codex-roadmap-patch.md](phase-00.5-codex-roadmap-patch.md) | [phase-00.5-claude-review.md](phase-00.5-claude-review.md) | [phase-00.5-merge-summary.md](phase-00.5-merge-summary.md) | Phase 00.5 已关闭，允许进入 Phase 01 |
+
+当前 gate 结论：
+
+> Phase 00.5 已关闭，允许进入 Phase 01；Phase 01 当前仍为 `planned`，尚未开始编码。
+
 | Phase | 目标摘要 | 状态 | 当前分支 | Handoff At | Codex Plan | Codex Status | Codex Handoff | Claude Review | Codex Fix | Merge Summary |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Phase 01 | 骨架与门禁 | planned |  |  | [phase-01/codex-plan.md](phase-01/codex-plan.md) | [phase-01/codex-status.md](phase-01/codex-status.md) | [phase-01/codex-handoff.md](phase-01/codex-handoff.md) | [phase-01/claude-review.md](phase-01/claude-review.md) | [phase-01/codex-fix-response.md](phase-01/codex-fix-response.md) | [phase-01/merge-summary.md](phase-01/merge-summary.md) |
