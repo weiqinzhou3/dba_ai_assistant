@@ -21,11 +21,15 @@
 
 当前 gate 结论：
 
-> Phase 00.5 已关闭，允许进入 Phase 01；Phase 01 当前仍为 `planned`，尚未开始编码。
+> Phase 00.5 已关闭。Phase 01 已完成 review closeout，并被标记为 `accepted`。
+>
+> `ready_for_next_phase = true`
+>
+> `next_phase = phase-02`
 
 | Phase | 目标摘要 | 状态 | 当前分支 | Handoff At | Codex Plan | Codex Status | Codex Handoff | Claude Review | Codex Fix | Merge Summary |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Phase 01 | 骨架与门禁 | planned |  |  | [phase-01/codex-plan.md](phase-01/codex-plan.md) | [phase-01/codex-status.md](phase-01/codex-status.md) | [phase-01/codex-handoff.md](phase-01/codex-handoff.md) | [phase-01/claude-review.md](phase-01/claude-review.md) | [phase-01/codex-fix-response.md](phase-01/codex-fix-response.md) | [phase-01/merge-summary.md](phase-01/merge-summary.md) |
+| Phase 01 | 骨架与门禁 | accepted | `docs/phase-01-closeout` | 2026-03-29 14:54:36 CST | [phase-01/codex-plan.md](phase-01/codex-plan.md) | [phase-01/codex-status.md](phase-01/codex-status.md) | [phase-01/codex-handoff.md](phase-01/codex-handoff.md) | [phase-01/claude-review.md](phase-01/claude-review.md) | [phase-01/codex-fix-response.md](phase-01/codex-fix-response.md) | [phase-01/merge-summary.md](phase-01/merge-summary.md) |
 | Phase 02 | 最小控制链路 | planned |  |  | [phase-02/codex-plan.md](phase-02/codex-plan.md) | [phase-02/codex-status.md](phase-02/codex-status.md) | [phase-02/codex-handoff.md](phase-02/codex-handoff.md) | [phase-02/claude-review.md](phase-02/claude-review.md) | [phase-02/codex-fix-response.md](phase-02/codex-fix-response.md) | [phase-02/merge-summary.md](phase-02/merge-summary.md) |
 | Phase 03 | mysql.database.create MVP | planned |  |  | [phase-03/codex-plan.md](phase-03/codex-plan.md) | [phase-03/codex-status.md](phase-03/codex-status.md) | [phase-03/codex-handoff.md](phase-03/codex-handoff.md) | [phase-03/claude-review.md](phase-03/claude-review.md) | [phase-03/codex-fix-response.md](phase-03/codex-fix-response.md) | [phase-03/merge-summary.md](phase-03/merge-summary.md) |
 | Phase 04 | Deep Agent 接入 | planned |  |  | [phase-04/codex-plan.md](phase-04/codex-plan.md) | [phase-04/codex-status.md](phase-04/codex-status.md) | [phase-04/codex-handoff.md](phase-04/codex-handoff.md) | [phase-04/claude-review.md](phase-04/claude-review.md) | [phase-04/codex-fix-response.md](phase-04/codex-fix-response.md) | [phase-04/merge-summary.md](phase-04/merge-summary.md) |
