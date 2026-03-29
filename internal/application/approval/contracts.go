@@ -29,6 +29,7 @@ type Record struct {
 
 type State struct {
 	OrderID        string               `json:"order_id"`
+	TraceID        string               `json:"trace_id,omitempty"`
 	ApprovalStatus order.ApprovalStatus `json:"approval_status"`
 	Status         order.Status         `json:"status"`
 	Records        []Record             `json:"records,omitempty"`

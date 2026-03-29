@@ -131,6 +131,7 @@ func (s *service) Submit(ctx context.Context, req ActionRequestDTO) (ActionSubmi
 	assistantOrder := order.AssistantOrder{
 		OrderID:          orderID,
 		RequestID:        request.RequestID,
+		TraceID:          traceID,
 		ActionName:       req.ActionHint,
 		ResolvedAssetIDs: append([]string(nil), resolvedAssets.AssetIDs...),
 		RiskLevel:        authzDecision.RiskLevel,

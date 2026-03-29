@@ -36,6 +36,7 @@ const (
 type AssistantOrder struct {
 	OrderID                string         `json:"order_id"`
 	RequestID              string         `json:"request_id"`
+	TraceID                string         `json:"trace_id"`
 	ActionName             string         `json:"action_name"`
 	ResolvedAssetIDs       []string       `json:"resolved_asset_ids"`
 	RiskLevel              risk.Level     `json:"risk_level"`
