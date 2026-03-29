@@ -54,6 +54,17 @@ func (s *Server) handleSubmitActionRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, r.Context(), common.NewError(common.CodeRequestInvalid, "invalid request body", nil), "")
 		return
 	}
+	authCtx := authContextFromRequest(r)
+	if authCtx.AuthenticatedPrincipalID != "" {
+		if req.PrincipalID != "" && req.PrincipalID != authCtx.AuthenticatedPrincipalID {
+			writeError(w, r.Context(), common.NewError(common.CodeRequestInvalid, "principal_id does not match authenticated principal", map[string]any{
+				"principal_id":               req.PrincipalID,
+				"authenticated_principal_id": authCtx.AuthenticatedPrincipalID,
+			}), "")
+			return
+		}
+		req.PrincipalID = authCtx.AuthenticatedPrincipalID
+	}
 
 	result, err := s.actionRequests.Submit(r.Context(), req)
 	if err != nil {

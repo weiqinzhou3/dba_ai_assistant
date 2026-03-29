@@ -63,6 +63,61 @@ func TestServerRoutesActionRequestsThroughUnifiedEntry(t *testing.T) {
 	}
 }
 
+func TestServerSubmitUsesAuthenticatedPrincipalIDWhenPresent(t *testing.T) {
+	actionService := &stubActionRequestService{
+		submitResult: appaction.ActionSubmissionResult{
+			RequestID:        "req_01",
+			OrderID:          "ord_01",
+			ActionName:       "mysql.database.create",
+			Status:           order.StatusApproved,
+			ApprovalRequired: false,
+			TraceID:          "trace_01",
+		},
+	}
+
+	server := NewServer(Dependencies{
+		ActionRequests: actionService,
+	})
+
+	body := []byte(`{"action_hint":"mysql.database.create","resource_selector":{"project":"order-platform","environment":"test","service_instance":"mysql-order-main"},"parameters":{"database_name":"order_center"}}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/action-requests", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Principal-ID", "u_header")
+	recorder := httptest.NewRecorder()
+
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", recorder.Code)
+	}
+	if actionService.lastSubmit.PrincipalID != "u_header" {
+		t.Fatalf("expected authenticated principal to override body principal, got %q", actionService.lastSubmit.PrincipalID)
+	}
+}
+
+func TestServerSubmitRejectsPrincipalMismatchAgainstAuthenticatedContext(t *testing.T) {
+	actionService := &stubActionRequestService{}
+
+	server := NewServer(Dependencies{
+		ActionRequests: actionService,
+	})
+
+	body := []byte(`{"principal_id":"u_body","action_hint":"mysql.database.create","resource_selector":{"project":"order-platform","environment":"test","service_instance":"mysql-order-main"},"parameters":{"database_name":"order_center"}}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/action-requests", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("X-Principal-ID", "u_header")
+	recorder := httptest.NewRecorder()
+
+	server.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", recorder.Code)
+	}
+	if actionService.submitCalled {
+		t.Fatalf("submit service must not be called when principal_id mismatches authenticated principal")
+	}
+}
+
 func TestServerMapsExecuteApprovalGateErrors(t *testing.T) {
 	actionService := &stubActionRequestService{
 		executeErr: common.NewError(common.CodeApprovalRequired, "order still requires approval", nil),
@@ -297,10 +352,12 @@ type stubActionRequestService struct {
 	executeErr     error
 	submitCalled   bool
 	executeCalled  bool
+	lastSubmit     appaction.ActionRequestDTO
 }
 
-func (s *stubActionRequestService) Submit(_ context.Context, _ appaction.ActionRequestDTO) (appaction.ActionSubmissionResult, error) {
+func (s *stubActionRequestService) Submit(_ context.Context, req appaction.ActionRequestDTO) (appaction.ActionSubmissionResult, error) {
 	s.submitCalled = true
+	s.lastSubmit = req
 	return s.submitResult, s.submitErr
 }
 
