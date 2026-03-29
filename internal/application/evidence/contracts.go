@@ -7,6 +7,7 @@ type Pack struct {
 	OrderID             string         `json:"order_id"`
 	TaskID              string         `json:"task_id,omitempty"`
 	TraceID             string         `json:"trace_id,omitempty"`
+	ArtifactRefs        []string       `json:"artifact_refs,omitempty"`
 	RequestSummary      string         `json:"request_summary,omitempty"`
 	BeforeStateSnapshot map[string]any `json:"before_state_snapshot,omitempty"`
 	AfterStateSnapshot  map[string]any `json:"after_state_snapshot,omitempty"`
@@ -21,6 +22,7 @@ type BuildInput struct {
 	OrderID             string         `json:"order_id"`
 	TaskID              string         `json:"task_id,omitempty"`
 	TraceID             string         `json:"trace_id,omitempty"`
+	ArtifactRefs        []string       `json:"artifact_refs,omitempty"`
 	RequestSummary      string         `json:"request_summary,omitempty"`
 	BeforeStateSnapshot map[string]any `json:"before_state_snapshot,omitempty"`
 	AfterStateSnapshot  map[string]any `json:"after_state_snapshot,omitempty"`

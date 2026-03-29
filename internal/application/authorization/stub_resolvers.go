@@ -75,8 +75,21 @@ func NewStaticRiskEngine() *StaticRiskEngine {
 
 func (e *StaticRiskEngine) Evaluate(_ context.Context, input risk.Input) (risk.Decision, error) {
 	environment := ""
+	sensitivity := ""
 	if len(input.Assets.Assets) > 0 {
 		environment = strings.ToLower(input.Assets.Assets[0].Environment)
+		sensitivity = strings.ToLower(input.Assets.Assets[0].Sensitivity)
+	}
+
+	if sensitivity == "high" || sensitivity == "critical" {
+		return risk.Decision{
+			RiskLevel: risk.LevelR2,
+			Decision:  risk.EffectRequireApproval,
+			Reasons:   []string{"high-sensitivity target requires explicit approval"},
+			SensitivitySnapshot: map[string]any{
+				"sensitivity": sensitivity,
+			},
+		}, nil
 	}
 
 	if environment == "prod" {
@@ -84,6 +97,9 @@ func (e *StaticRiskEngine) Evaluate(_ context.Context, input risk.Input) (risk.D
 			RiskLevel: risk.LevelR2,
 			Decision:  risk.EffectRequireApproval,
 			Reasons:   []string{"prod change requires explicit approval"},
+			SensitivitySnapshot: map[string]any{
+				"sensitivity": sensitivity,
+			},
 		}, nil
 	}
 
@@ -91,6 +107,9 @@ func (e *StaticRiskEngine) Evaluate(_ context.Context, input risk.Input) (risk.D
 		RiskLevel: risk.LevelR1,
 		Decision:  risk.EffectAllow,
 		Reasons:   []string{"non-prod environment"},
+		SensitivitySnapshot: map[string]any{
+			"sensitivity": sensitivity,
+		},
 	}, nil
 }
 
@@ -132,6 +151,7 @@ func StaticManagedAssets() []asset.Asset {
 			Environment:     "test",
 			ServiceInstance: "mysql-order-main",
 			CanonicalName:   "mysql-order-main",
+			Sensitivity:     "normal",
 			ConnectionRef:   "secret://db-targets/mysql-order-main-test",
 		},
 		{
@@ -141,6 +161,7 @@ func StaticManagedAssets() []asset.Asset {
 			Environment:     "prod",
 			ServiceInstance: "mysql-order-main",
 			CanonicalName:   "mysql-order-main",
+			Sensitivity:     "high",
 			ConnectionRef:   "secret://db-targets/mysql-order-main-prod",
 		},
 	}

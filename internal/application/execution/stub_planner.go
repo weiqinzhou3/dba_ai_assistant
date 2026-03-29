@@ -35,10 +35,27 @@ func (p *StaticExecutionPlanner) Build(_ context.Context, ord order.AssistantOrd
 }
 
 func (p *StaticExecutionPlanner) Revalidate(_ context.Context, _ order.AssistantOrder, existing plan.ExecutionPlan) (PlanValidationResult, error) {
+	if existing.PlanStatus == plan.StatusStale || existing.StaleReason != "" {
+		reason := existing.StaleReason
+		if reason == "" {
+			reason = "plan already marked stale"
+		}
+		return PlanValidationResult{
+			Valid:  false,
+			Status: plan.StatusStale,
+			Reason: reason,
+		}, nil
+	}
+	if !existing.SnapshotFrozen {
+		return PlanValidationResult{
+			Valid:  false,
+			Status: plan.StatusStale,
+			Reason: "plan snapshot is not frozen",
+		}, nil
+	}
 	return PlanValidationResult{
 		Valid:  true,
 		Status: plan.StatusRevalidated,
-		Reason: existing.StaleReason,
 	}, nil
 }
 
@@ -56,14 +73,19 @@ func (r *StaticExecutionRouter) Route(_ context.Context, _ plan.ExecutionPlan) (
 }
 
 type NoopTaskRuntime struct {
-	tasks map[string]task.ExecutionTask
+	tasks taskRepository
 }
 
-func NewNoopTaskRuntime() *NoopTaskRuntime {
-	return &NoopTaskRuntime{tasks: map[string]task.ExecutionTask{}}
+type taskRepository interface {
+	SaveTask(ctx context.Context, executionTask task.ExecutionTask) error
+	GetTask(ctx context.Context, taskID string) (task.ExecutionTask, error)
 }
 
-func (r *NoopTaskRuntime) Start(_ context.Context, ord order.AssistantOrder, _ plan.ExecutionPlan) (task.ExecutionTask, error) {
+func NewNoopTaskRuntime(tasks taskRepository) *NoopTaskRuntime {
+	return &NoopTaskRuntime{tasks: tasks}
+}
+
+func (r *NoopTaskRuntime) Start(ctx context.Context, ord order.AssistantOrder, _ plan.ExecutionPlan) (task.ExecutionTask, error) {
 	now := time.Now().UTC()
 	created := task.ExecutionTask{
 		TaskID:      "task_" + ord.OrderID,
@@ -74,13 +96,9 @@ func (r *NoopTaskRuntime) Start(_ context.Context, ord order.AssistantOrder, _ p
 		StartedAt:   now,
 		HeartbeatAt: now,
 	}
-	r.tasks[created.TaskID] = created
-	return created, nil
+	return created, r.tasks.SaveTask(ctx, created)
 }
 
-func (r *NoopTaskRuntime) Get(_ context.Context, taskID string) (task.ExecutionTask, error) {
-	if taskValue, ok := r.tasks[taskID]; ok {
-		return taskValue, nil
-	}
-	return task.ExecutionTask{}, nil
+func (r *NoopTaskRuntime) Get(ctx context.Context, taskID string) (task.ExecutionTask, error) {
+	return r.tasks.GetTask(ctx, taskID)
 }
