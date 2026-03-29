@@ -2,12 +2,14 @@
 
 ## 当前阶段结论
 
-- Phase 02 已完成 review closeout，并被标记为 `accepted`。
-- 当前仓库状态已同步为：Phase 02 收口完成，准备进入 Phase 03。
-- 当前系统已能通过 HTTP API 走通 request / approval / execute / audit / evidence 最小闭环。
-- 当前系统仍不做真实 `mysql.database.create` 执行。
+- Phase 03 已完成 review closeout，并被标记为 `accepted`。
+- Phase 03 closeout 已完成；本轮只做文档与仓库状态同步，不进入 Phase 04 实施。
+- 当前系统已具备 `mysql.database.create` 的最小真实纵切：HTTP API 可走通 request / approval / execute / audit / evidence 的真实闭环。
+- 当前系统已完成真实 `DBNativeAdapter` southbound 执行，但仍严格只覆盖 `mysql.database.create`。
 - `ready_for_next_phase = true`
-- `next_phase = phase-03`
+- `next_phase = phase-04`
+- 下一阶段为 Phase 04：Deep Agent 接入（尚未开始）
+- `main_cleanup_verification = completed` — main 与 origin/main 完全对齐 (`547e23c`)，工作区干净，`go test ./...` 全部通过，Phase 03 改动也已 fresh 执行 `go test ./...` 通过。
 
 ## 已完成
 
@@ -72,7 +74,7 @@
   - 审批与执行物理分离
   - `AuditService` 已进入 request/query skeleton
   - `EvidenceService` 已进入 query/view skeleton 与 `trace_id` contract
-  - southbound 只建立了 `DBNativeAdapter` skeleton
+  - southbound 当前只开放 `DBNativeAdapter`，且只支持 `mysql.database.create`
 - 已补充 Phase 1 缺项：
   - all northbound / skill 输出 `trace_id` contract
   - `AdapterExecutionRequest.IdempotencyKey`
@@ -98,6 +100,33 @@
   - Phase 02 approval transition tests
   - Phase 02 execute revalidate / stale / idempotent execute tests
   - Phase 02 HTTP control-flow integration test
+
+## Phase 03 已新增
+
+- 已把 [internal/application/actionrequest/service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/actionrequest/service.go) 升级为真实 execute 主链路：
+  - `mysql.database.create` 提交参数校验
+  - execute 前真实 revalidate
+  - 最小幂等记录与冲突处理
+  - terminal audit / evidence 收口
+- 已把 [internal/application/execution/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/execution/contracts.go) 与 [internal/application/execution/stub_planner.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/execution/stub_planner.go) 升级为：
+  - 带真实 adapter binding 的 `ExecutionRouter`
+  - 同步 terminal `TaskRuntime`
+  - `IdempotencyRecord` contract
+- 已把 [internal/adapters/dbnative/adapter.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/adapters/dbnative/adapter.go) 升级为最小真实 MySQL adapter：
+  - 连接引用解析
+  - DryRun 真实预检
+  - `CREATE DATABASE`
+  - 执行后校验
+  - SQL 摘要与 artifact 引用
+- 已把 [internal/persistence/memory.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/persistence/memory.go) 增加最小幂等记录存储。
+- 已把 [internal/api/server.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/api/server.go) 收敛 approval actor / execute actor 的认证边界：
+  - execute 继续只信任认证上下文
+  - approval 在认证上下文存在时优先信任 `X-Principal-ID`
+  - body/header mismatch 返回 `REQ_INVALID`
+- 已把 [internal/application/approval/service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/approval/service.go) 增加 `approver_id` 非空校验。
+- 已新增 Phase 03 文档：
+  - [design_docs/26-phase-03-mysql-database-create-notes-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/26-phase-03-mysql-database-create-notes-v0.1.md)
+  - [design_docs/27-phase-03-manual-verification-runbook-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/27-phase-03-manual-verification-runbook-v0.1.md)
 
 ## Phase 02 已新增
 
@@ -145,54 +174,41 @@
 
 - [internal/application/approval/noop_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/approval/noop_service.go)
   - 旧 Phase 01 noop 仍保留在仓库中，但主程序已改用新的 repo-backed `ApprovalService`。
-- [internal/application/actionrequest/service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/actionrequest/service.go)
-  - request / execute 主链路已打通。
-  - 但 `execute` 仍只起 task skeleton，不调用真实 adapter execute。
-- [internal/application/execution/stub_planner.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/execution/stub_planner.go)
-  - planner/router/runtime 仍是静态 stub，`Revalidate(...)` 只做最小占位检查。
-- [internal/application/evidence/memory_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/evidence/memory_service.go)
-  - 当前 evidence 语义仍是 Phase 02 最小控制流证据，不是最终执行证据模型。
 - [internal/application/audit/memory_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/audit/memory_service.go)
   - 当前仍是内存型 append-only 审计，不是持久化数据库实现。
 - [internal/skill/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/skill/contracts.go)
   - skill 输入输出 contract 已建立，但还没有单独的 Skill runtime / SDK 层。
-- [internal/adapters/dbnative/adapter.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/adapters/dbnative/adapter.go)
-  - 仅实现 adapter contract、dry-run stub 和失败型 execute 返回，没有真实 MySQL 连接与 `CREATE DATABASE`。
 - [internal/persistence/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/persistence/contracts.go)
   - 仍是内存 contract + store，不是数据库级持久化仓储。
 
 ## 还没有实现
 
-- 完整 `mysql.database.create` 真实执行闭环
-- execute 前真实 `Plan Re-validate`
 - 基于持久化 `ExecutePolicy` 的真实校验
-- approval actor 从认证上下文解析并做审批角色校验
-- `ExecutionTask` 真正推进到 terminal state
+- approval actor 从认证中间件强制收口，彻底移除 body fallback
 - 审批 TTL 的后台调度与真实周期扫描
-- 成功/失败终态的真实 `EvidencePack` 固化
 - 持久化数据库版 append-only audit repository
 - 持久化数据库版 unified repository
 - 多 adapter 路由策略
 
 ## 下一阶段准备做什么
 
-1. 在 Phase 03 把 `TaskRuntime` 从 skeleton 升级为真实 southbound 执行。
-2. 在 `DBNativeAdapter` 中只补 `mysql.database.create` 的最小纵切，不扩散到其他动作。
-3. 把 execute policy 与 approval actor 校验从静态/请求体模式升级到正式认证上下文与策略求值。
-4. 把当前内存型 audit / evidence / repository 切到持久化实现。
+1. Phase 03 review / closeout 已完成，当前仓库状态允许进入下一阶段，但本轮未进入 Phase 04 实施。
+2. 下一阶段目标为 Phase 04：Deep Agent 接入。
+3. 若继续打磨控制层本体，优先把 approval actor 从“认证上下文优先”收紧到“只信任认证上下文”。
+4. 把当前内存型 idempotency / audit / evidence / repository 逐步切到持久化实现。
 
 ## 当前架构风险与待确认点
 
-- 当前 execute 成功路径的 `EvidencePack.execution_success=true` 表示“控制链路成功启动 task skeleton”，不是“数据库已创建成功”；Phase 03 需要把这个语义切回真实终态。
-- approval API 当前仍通过 body 传 `approver_id`，正式鉴权语义还未收口到认证上下文。
+- 当前 approval API 已做到“认证上下文优先 + mismatch 阻断”，但还没有完全禁止无认证上下文时的 body fallback。
 - 当前 persistence 是共享内存 store，适合 Phase 02 演示与测试，但不具备重启恢复能力。
 - 目前 northbound auth context 通过 HTTP header 占位承载，正式接入时需要替换成真实认证中间件，但不能改变 `PrincipalResolver` 是唯一身份装配入口这一原则。
 - review 文档里把 `APPROVAL_EXPIRED` 写成 order status，但正式 spec / interface design / schema 的权威语义是 order `EXPIRED` + audit event `APPROVAL_EXPIRED`。当前代码按正式文档实现，并已用 `// REVIEW:` 注释标明。
-- 目前 `DBNativeAdapter` 的 stub 明确拒绝真实执行；下一轮实现时必须继续保持：
+- 当前 `DBNativeAdapter` 已是真实 MySQL 实现，但必须继续保持：
   - 不绕过 `AuthorizationService`
   - 不把 request 权限与 execute 权限混成一个策略
   - 不绕过审批 / execute 分离
   - 不在 `AssetResolver` 中引入 fuzzy match
+  - 不扩散到其他动作
 
 ## 验证记录
 
@@ -201,7 +217,7 @@
 - `feat/p2-min-control-flow-v2` 已获 Claude review `PASS`，允许进入 Phase 03
 - `go test ./...`
 - 本地 HTTP smoke 已验证：
-  - prod: `WAITING_APPROVAL -> APPROVED -> EXECUTING`
+  - prod: `WAITING_APPROVAL -> APPROVED -> SUCCEEDED`
   - stale: `APPROVED -> PLAN_STALE`
   - `GET /api/v1/audit-ledger/{request_id}` 可查询最小闭环
   - `GET /api/v1/evidence-packs/{order_id}` 可查询最小闭环

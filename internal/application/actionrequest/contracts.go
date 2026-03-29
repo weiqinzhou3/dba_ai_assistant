@@ -96,4 +96,5 @@ type Dependencies struct {
 	Orders            orderRepository
 	Plans             planRepository
 	Tasks             taskRepository
+	Idempotency       appexec.IdempotencyRepository
 }

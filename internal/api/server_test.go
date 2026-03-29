@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"dba_ai_assistant/internal/adapters/dbnative"
 	appaction "dba_ai_assistant/internal/application/actionrequest"
 	appapproval "dba_ai_assistant/internal/application/approval"
 	appaudit "dba_ai_assistant/internal/application/audit"
@@ -218,6 +219,7 @@ func TestServerSupportsManualControlFlowOverHTTP(t *testing.T) {
 	approvalBody := []byte(`{"approver_id":"u_approver","decision":"APPROVE","comment":"approved"}`)
 	approvalRequest := httptest.NewRequest(http.MethodPost, "/api/v1/orders/"+submitResult.OrderID+"/approvals", bytes.NewReader(approvalBody))
 	approvalRequest.Header.Set("Content-Type", "application/json")
+	approvalRequest.Header.Set("X-Principal-ID", "u_approver")
 	approvalRecorder := httptest.NewRecorder()
 	server.ServeHTTP(approvalRecorder, approvalRequest)
 	if approvalRecorder.Code != http.StatusAccepted {
@@ -239,8 +241,8 @@ func TestServerSupportsManualControlFlowOverHTTP(t *testing.T) {
 	if err := json.Unmarshal(executeRecorder.Body.Bytes(), &executeResult); err != nil {
 		t.Fatalf("failed to decode execute response: %v", err)
 	}
-	if executeResult.Status != order.StatusExecuting {
-		t.Fatalf("expected execute to move order to EXECUTING, got %s", executeResult.Status)
+	if executeResult.Status != order.StatusSucceeded {
+		t.Fatalf("expected execute to move order to SUCCEEDED, got %s", executeResult.Status)
 	}
 	if executeResult.TaskID == "" {
 		t.Fatalf("expected execute to create a task id")
@@ -260,8 +262,8 @@ func TestServerSupportsManualControlFlowOverHTTP(t *testing.T) {
 	if ledger.TraceID != submitResult.TraceID {
 		t.Fatalf("expected ledger trace id %q, got %q", submitResult.TraceID, ledger.TraceID)
 	}
-	if ledger.LatestOrderStatus != string(order.StatusExecuting) {
-		t.Fatalf("expected latest order status EXECUTING, got %q", ledger.LatestOrderStatus)
+	if ledger.LatestOrderStatus != string(order.StatusSucceeded) {
+		t.Fatalf("expected latest order status SUCCEEDED, got %q", ledger.LatestOrderStatus)
 	}
 	if ledger.LatestTaskID != executeResult.TaskID {
 		t.Fatalf("expected latest task id %q, got %q", executeResult.TaskID, ledger.LatestTaskID)
@@ -434,8 +436,16 @@ func newPhaseTwoHTTPServer(t *testing.T) http.Handler {
 		),
 		ExecuteAuth: appauth.NewStaticExecuteAuthorizationService(),
 		Planner:     appexec.NewStaticExecutionPlanner(),
-		Router:      appexec.NewStaticExecutionRouter(),
-		Runtime:     appexec.NewNoopTaskRuntime(store),
+		Router: appexec.NewStaticExecutionRouter(dbnative.New(dbnative.Dependencies{
+			ConnectionResolver: staticConnectionResolver{
+				config: dbnative.ConnectionConfig{Engine: "mysql", DSN: "mysql-test"},
+			},
+			MySQL: &fakeMySQLAdmin{
+				existing: map[string]bool{},
+			},
+			Now: fixedNow,
+		})),
+		Runtime:     appexec.NewSynchronousTaskRuntime(store),
 		Approval:    approvalService,
 		Audit:       auditService,
 		Evidence:    evidenceService,
@@ -443,6 +453,7 @@ func newPhaseTwoHTTPServer(t *testing.T) http.Handler {
 		Orders:      store,
 		Plans:       store,
 		Tasks:       store,
+		Idempotency: store,
 	})
 
 	return NewServer(Dependencies{
@@ -451,4 +462,37 @@ func newPhaseTwoHTTPServer(t *testing.T) http.Handler {
 		Audit:          auditService,
 		Evidence:       evidenceService,
 	})
+}
+
+func fixedNow() time.Time {
+	return time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC)
+}
+
+type staticConnectionResolver struct {
+	config dbnative.ConnectionConfig
+	err    error
+}
+
+func (r staticConnectionResolver) Resolve(_ context.Context, _ string) (dbnative.ConnectionConfig, error) {
+	if r.err != nil {
+		return dbnative.ConnectionConfig{}, r.err
+	}
+	return r.config, nil
+}
+
+type fakeMySQLAdmin struct {
+	existing map[string]bool
+}
+
+func (a *fakeMySQLAdmin) Ping(_ context.Context, _ dbnative.ConnectionConfig) error {
+	return nil
+}
+
+func (a *fakeMySQLAdmin) DatabaseExists(_ context.Context, _ dbnative.ConnectionConfig, databaseName string) (bool, error) {
+	return a.existing[databaseName], nil
+}
+
+func (a *fakeMySQLAdmin) CreateDatabase(_ context.Context, _ dbnative.ConnectionConfig, databaseName string) error {
+	a.existing[databaseName] = true
+	return nil
 }

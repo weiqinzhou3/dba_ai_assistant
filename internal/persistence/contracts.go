@@ -6,6 +6,7 @@ import (
 	"dba_ai_assistant/internal/application/approval"
 	"dba_ai_assistant/internal/application/audit"
 	"dba_ai_assistant/internal/application/evidence"
+	appexec "dba_ai_assistant/internal/application/execution"
 	"dba_ai_assistant/internal/domain/action"
 	"dba_ai_assistant/internal/domain/order"
 	"dba_ai_assistant/internal/domain/plan"
@@ -58,4 +59,9 @@ type AuditRepository interface {
 type EvidenceRepository interface {
 	SaveEvidencePack(ctx context.Context, pack evidence.Pack) error
 	GetEvidencePackByOrderID(ctx context.Context, orderID string) (evidence.Pack, error)
+}
+
+type IdempotencyRepository interface {
+	SaveIdempotencyRecord(ctx context.Context, record appexec.IdempotencyRecord) error
+	GetIdempotencyRecord(ctx context.Context, key string) (appexec.IdempotencyRecord, bool, error)
 }
