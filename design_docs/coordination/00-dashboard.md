@@ -26,6 +26,8 @@
 > `ready_for_next_phase = true`
 >
 > `next_phase = phase-03`
+>
+> `main_cleanup_verification = completed` (2026-03-29, [main-cleanup-verification-v0.1.md](main-cleanup-verification-v0.1.md))
 
 | Phase | 目标摘要 | 状态 | 当前分支 | Handoff At | Codex Plan | Codex Status | Codex Handoff | Claude Review | Codex Fix | Merge Summary |
 |---|---|---|---|---|---|---|---|---|---|---|

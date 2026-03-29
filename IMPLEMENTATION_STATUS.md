@@ -8,6 +8,7 @@
 - 当前系统仍不做真实 `mysql.database.create` 执行。
 - `ready_for_next_phase = true`
 - `next_phase = phase-03`
+- `main_cleanup_verification = completed` — main 与 origin/main 完全对齐 (`547e23c`)，工作区干净，`go test ./...` 全部通过，适合作为 Phase 03 基线。
 
 ## 已完成
 
