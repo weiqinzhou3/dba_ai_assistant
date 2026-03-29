@@ -16,6 +16,7 @@ type RequestMySQLDatabaseCreateOutput struct {
 	OrderID          string       `json:"order_id"`
 	OrderStatus      order.Status `json:"order_status"`
 	RequiresApproval bool         `json:"requires_approval"`
+	TraceID          string       `json:"trace_id"`
 }
 
 type ExecuteAssistantOrderInput struct {
@@ -25,6 +26,7 @@ type ExecuteAssistantOrderInput struct {
 type ExecuteAssistantOrderOutput struct {
 	TaskID     string `json:"task_id,omitempty"`
 	TaskStatus string `json:"task_status"`
+	TraceID    string `json:"trace_id"`
 }
 
 func MapRequestMySQLDatabaseCreateOutput(result appaction.ActionSubmissionResult) RequestMySQLDatabaseCreateOutput {
@@ -32,6 +34,7 @@ func MapRequestMySQLDatabaseCreateOutput(result appaction.ActionSubmissionResult
 		OrderID:          result.OrderID,
 		OrderStatus:      result.Status,
 		RequiresApproval: result.ApprovalRequired,
+		TraceID:          result.TraceID,
 	}
 }
 
@@ -39,5 +42,6 @@ func MapExecuteAssistantOrderOutput(result appaction.ExecuteOrderResult) Execute
 	return ExecuteAssistantOrderOutput{
 		TaskID:     result.TaskID,
 		TaskStatus: string(result.Status),
+		TraceID:    result.TraceID,
 	}
 }

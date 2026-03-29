@@ -17,6 +17,7 @@ func NewNoopService() *NoopService {
 func (s *NoopService) Create(_ context.Context, ord order.AssistantOrder, _ CreateInput) (State, error) {
 	return State{
 		OrderID:        ord.OrderID,
+		TraceID:        ord.TraceID,
 		ApprovalStatus: ord.ApprovalStatus,
 		Status:         ord.Status,
 	}, nil

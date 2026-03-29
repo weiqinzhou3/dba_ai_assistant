@@ -13,9 +13,18 @@
 
 ## 当前总览
 
+## Phase 00.5 Closeout
+
+| Stage | 目标摘要 | 状态 | 当前分支 | Baseline | Codex Patch | Claude Review | Merge Summary | Gate |
+|---|---|---|---|---|---|---|---|---|
+| Phase 00.5 | 路线图、协作协议与现有代码基线收口 | accepted | `docs/phase-00.5-closeout` | [../21-current-codebase-baseline-v0.1.md](../21-current-codebase-baseline-v0.1.md) | [phase-00.5-codex-roadmap-patch.md](phase-00.5-codex-roadmap-patch.md) | [phase-00.5-claude-review.md](phase-00.5-claude-review.md) | [phase-00.5-merge-summary.md](phase-00.5-merge-summary.md) | Phase 00.5 已关闭，允许进入 Phase 01 |
+
+当前 gate 结论：
+
+> Phase 00.5 已关闭，允许进入 Phase 01；Phase 01 当前已完成 baseline inventory / gap analysis / guardrail 收口，状态为 `awaiting_review`，尚未进入 Phase 02。
 | Phase | 目标摘要 | 状态 | 当前分支 | Handoff At | Codex Plan | Codex Status | Codex Handoff | Claude Review | Codex Fix | Merge Summary |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Phase 01 | 骨架与门禁 | planned |  |  | [phase-01/codex-plan.md](phase-01/codex-plan.md) | [phase-01/codex-status.md](phase-01/codex-status.md) | [phase-01/codex-handoff.md](phase-01/codex-handoff.md) | [phase-01/claude-review.md](phase-01/claude-review.md) | [phase-01/codex-fix-response.md](phase-01/codex-fix-response.md) | [phase-01/merge-summary.md](phase-01/merge-summary.md) |
+| Phase 01 | 骨架与门禁 | awaiting_review | `feat/p1-baseline-gap-and-guardrails` | 2026-03-29 14:54:36 CST | [phase-01/codex-plan.md](phase-01/codex-plan.md) | [phase-01/codex-status.md](phase-01/codex-status.md) | [phase-01/codex-handoff.md](phase-01/codex-handoff.md) | [phase-01/claude-review.md](phase-01/claude-review.md) | [phase-01/codex-fix-response.md](phase-01/codex-fix-response.md) | [phase-01/merge-summary.md](phase-01/merge-summary.md) |
 | Phase 02 | 最小控制链路 | planned |  |  | [phase-02/codex-plan.md](phase-02/codex-plan.md) | [phase-02/codex-status.md](phase-02/codex-status.md) | [phase-02/codex-handoff.md](phase-02/codex-handoff.md) | [phase-02/claude-review.md](phase-02/claude-review.md) | [phase-02/codex-fix-response.md](phase-02/codex-fix-response.md) | [phase-02/merge-summary.md](phase-02/merge-summary.md) |
 | Phase 03 | mysql.database.create MVP | planned |  |  | [phase-03/codex-plan.md](phase-03/codex-plan.md) | [phase-03/codex-status.md](phase-03/codex-status.md) | [phase-03/codex-handoff.md](phase-03/codex-handoff.md) | [phase-03/claude-review.md](phase-03/claude-review.md) | [phase-03/codex-fix-response.md](phase-03/codex-fix-response.md) | [phase-03/merge-summary.md](phase-03/merge-summary.md) |
 | Phase 04 | Deep Agent 接入 | planned |  |  | [phase-04/codex-plan.md](phase-04/codex-plan.md) | [phase-04/codex-status.md](phase-04/codex-status.md) | [phase-04/codex-handoff.md](phase-04/codex-handoff.md) | [phase-04/claude-review.md](phase-04/claude-review.md) | [phase-04/codex-fix-response.md](phase-04/codex-fix-response.md) | [phase-04/merge-summary.md](phase-04/merge-summary.md) |

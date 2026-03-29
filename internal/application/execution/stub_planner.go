@@ -68,6 +68,7 @@ func (r *NoopTaskRuntime) Start(_ context.Context, ord order.AssistantOrder, _ p
 	created := task.ExecutionTask{
 		TaskID:      "task_" + ord.OrderID,
 		OrderID:     ord.OrderID,
+		TraceID:     ord.TraceID,
 		ActionName:  ord.ActionName,
 		Status:      task.StatusRunning,
 		StartedAt:   now,

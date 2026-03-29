@@ -16,6 +16,7 @@ const (
 type ExecutionTask struct {
 	TaskID      string    `json:"task_id"`
 	OrderID     string    `json:"order_id"`
+	TraceID     string    `json:"trace_id"`
 	ActionName  string    `json:"action_name"`
 	Status      Status    `json:"status"`
 	StartedAt   time.Time `json:"started_at,omitempty"`

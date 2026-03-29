@@ -40,8 +40,17 @@ func (s *MemoryService) GetViewByRequestID(ctx context.Context, requestID string
 	if err != nil {
 		return LedgerView{}, err
 	}
+
+	traceID := ""
+	for _, event := range events {
+		if event.TraceID != "" {
+			traceID = event.TraceID
+			break
+		}
+	}
 	return LedgerView{
 		RequestID: requestID,
+		TraceID:   traceID,
 		Events:    events,
 	}, nil
 }

@@ -255,6 +255,56 @@ func TestServiceExecuteApprovedOrderFailsClosedWhenExecuteAuthorizationIsMissing
 	}
 }
 
+func TestServiceGetOrderReturnsTraceIDFromSubmission(t *testing.T) {
+	service := NewService(
+		&stubPrincipalResolver{},
+		&stubAssetResolver{},
+		&stubAuthorizationService{
+			decision: dauth.Decision{
+				Authorized:       true,
+				FinalDecision:    dauth.FinalDecisionAllowNoApproval,
+				ApprovalRequired: false,
+				RiskLevel:        risk.LevelR1,
+			},
+		},
+		&stubExecuteAuthorizationService{
+			decision: appauth.ExecuteAuthorizationDecision{Allowed: true},
+		},
+		&stubExecutionPlanner{
+			plan: plan.ExecutionPlan{
+				PlanID:      "plan_05",
+				PlanVersion: 1,
+				PlanStatus:  plan.StatusFrozen,
+			},
+		},
+		&recordingAuditService{},
+	)
+
+	submitResult, err := service.Submit(context.Background(), ActionRequestDTO{
+		PrincipalID: "u_1001",
+		ActionHint:  "mysql.database.create",
+		ResourceSelector: asset.Selector{
+			Project:         "order-platform",
+			Environment:     "test",
+			ServiceInstance: "mysql-order-main",
+		},
+		Parameters: map[string]any{
+			"database_name": "order_center",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Submit returned error: %v", err)
+	}
+
+	view, err := service.GetOrder(context.Background(), submitResult.OrderID)
+	if err != nil {
+		t.Fatalf("GetOrder returned error: %v", err)
+	}
+	if view.TraceID != submitResult.TraceID {
+		t.Fatalf("expected trace id %q, got %q", submitResult.TraceID, view.TraceID)
+	}
+}
+
 type stubPrincipalResolver struct{}
 
 func (s *stubPrincipalResolver) Resolve(_ context.Context, principalID string, authCtx appauth.AuthContext) (principal.Principal, error) {

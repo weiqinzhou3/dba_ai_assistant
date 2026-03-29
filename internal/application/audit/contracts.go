@@ -35,6 +35,7 @@ type Event struct {
 
 type LedgerView struct {
 	RequestID string  `json:"request_id"`
+	TraceID   string  `json:"trace_id,omitempty"`
 	Events    []Event `json:"events"`
 }
 

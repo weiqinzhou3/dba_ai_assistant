@@ -24,6 +24,7 @@ func (s *MemoryService) Build(_ context.Context, input BuildInput) (Pack, error)
 		EvidenceID:          "evd_" + input.OrderID,
 		OrderID:             input.OrderID,
 		TaskID:              input.TaskID,
+		TraceID:             input.TraceID,
 		RequestSummary:      input.RequestSummary,
 		BeforeStateSnapshot: input.BeforeStateSnapshot,
 		AfterStateSnapshot:  input.AfterStateSnapshot,

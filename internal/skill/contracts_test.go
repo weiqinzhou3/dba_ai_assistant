@@ -12,6 +12,7 @@ func TestMapRequestMySQLDatabaseCreateOutputFromActionSubmissionResult(t *testin
 		OrderID:          "ord_01",
 		Status:           order.StatusApproved,
 		ApprovalRequired: false,
+		TraceID:          "trace_01",
 	})
 
 	if got.OrderID != "ord_01" {
@@ -22,5 +23,26 @@ func TestMapRequestMySQLDatabaseCreateOutputFromActionSubmissionResult(t *testin
 	}
 	if got.RequiresApproval {
 		t.Fatalf("expected requires_approval=false")
+	}
+	if got.TraceID != "trace_01" {
+		t.Fatalf("expected trace id to be mapped")
+	}
+}
+
+func TestMapExecuteAssistantOrderOutputFromExecuteOrderResult(t *testing.T) {
+	got := MapExecuteAssistantOrderOutput(appaction.ExecuteOrderResult{
+		TaskID:  "task_01",
+		Status:  order.StatusExecuting,
+		TraceID: "trace_01",
+	})
+
+	if got.TaskID != "task_01" {
+		t.Fatalf("expected task id to be mapped")
+	}
+	if got.TaskStatus != string(order.StatusExecuting) {
+		t.Fatalf("expected task status to be mapped")
+	}
+	if got.TraceID != "trace_01" {
+		t.Fatalf("expected trace id to be mapped")
 	}
 }
