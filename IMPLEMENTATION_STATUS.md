@@ -1,10 +1,19 @@
 # IMPLEMENTATION STATUS
 
+## 当前阶段结论
+
+- Phase 01 已基于最新 `main` 完成 review closeout-v2，并被标记为 `accepted`。
+- 当前阶段只完成骨架与门禁收口；本轮只重放 closeout 文档与状态，不包含真实 `mysql.database.create` 执行。
+- `ready_for_next_phase = true`
+- `next_phase = phase-02`
+
 ## 已完成
 
 - 已新增 [design_docs/10-implementation-alignment-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/10-implementation-alignment-v0.1.md)，把主链路、边界、门禁和代码切分方式固定下来。
 - 已新增 [design_docs/22-phase-01-gap-analysis-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/22-phase-01-gap-analysis-v0.1.md)，对现有 Go skeleton 做 Phase 01 级盘点与 gap analysis。
 - 已新增 [design_docs/23-phase-01-skeleton-delta-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/23-phase-01-skeleton-delta-v0.1.md)，记录本轮骨架与门禁补齐范围。
+- 已保留 [design_docs/21-current-codebase-baseline-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/21-current-codebase-baseline-v0.1.md) 作为 Phase 00.5 基线证据；Phase 01 的 `22` 文档是补充，不替代 Phase 00.5 证据。
+- 已在最新 `main` 上重放 Phase 00.5 / Phase 01 closeout 文档，避免继续在旧 `docs/phase-01-closeout` PR 上处理冲突。
 - 已建立 Go 模块化单体 skeleton：
   - `cmd/server/`
   - `internal/api/`
@@ -119,7 +128,7 @@
 - 基于 persistence repository 的统一存储层
 - 多 adapter 路由策略
 
-## 下一轮最合理的工作
+## 下一阶段准备做什么
 
 1. 先把 `ActionRequestService` 从内部 map 存储切到 `internal/persistence` repository interface。
 2. 打通 `ApprovalService` 与 `AssistantOrder` / `ExecutionPlan` 共享存储，落真实：
@@ -129,11 +138,13 @@
    - `ApprovalPolicy.TTL` 驱动的过期扫描
 3. 打通 `ExecuteApprovedOrder(...)` 的最小闭环：
    - execute auth（基于独立 `ExecutePolicy`）
-   - plan re-validate
+   - plan revalidate
    - `ExecutionRouter`
    - `TaskRuntime`
 4. 在 `DBNativeAdapter` 中只补 `mysql.database.create` 的最小纵切，不扩散到其他动作。
 5. 把审计与证据从当前内存 stub 升级为 append-only / 可查询的真实实现。
+6. 补 `internal/application/approval/` 的直接测试文件。
+7. 明确 `MemoryAuditService.GetViewByRequestID(...)` 在后续 execute / retry 场景下的 `trace_id` 策略。
 
 ## 当前架构风险与待确认点
 
@@ -151,5 +162,6 @@
 
 ## 验证记录
 
-- `gofmt -w $(find internal cmd -type f -name '*.go')`
-- `go test ./...`
+- reviewed branch `feat/p1-baseline-gap-and-guardrails` 已在 Claude review 中确认：`go test ./...` 全部通过
+- `docs/phase-01-closeout-v2` 已于 2026-03-29 fresh 执行 `go test ./...` 并通过
+- 本轮 closeout-v2 只重放文档与状态收口，不新增业务代码
