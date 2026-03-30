@@ -3,13 +3,19 @@
 ## 当前阶段结论
 
 - Phase 03 已完成 review closeout，并被标记为 `accepted`。
-- Phase 03 closeout 已完成；本轮只做文档与仓库状态同步，不进入 Phase 04 实施。
+- Phase 04 最小 Deep Agent 接入已完成实现，当前处于 `awaiting_review`。
 - 当前系统已具备 `mysql.database.create` 的最小真实纵切：HTTP API 可走通 request / approval / execute / audit / evidence 的真实闭环。
+- 当前系统已新增最小 Deep Agent Skill 接入层：
+  - `request_mysql_database_create`
+  - `execute_assistant_order`
+- Skill 侧现在通过既有 northbound Control API 调用系统，并在无审批路径上支持受控的 request -> execute 自动串联。
 - 当前系统已完成真实 `DBNativeAdapter` southbound 执行，但仍严格只覆盖 `mysql.database.create`。
-- `ready_for_next_phase = true`
-- `next_phase = phase-04`
-- 下一阶段为 Phase 04：Deep Agent 接入（尚未开始）
-- `main_cleanup_verification = completed` — main 与 origin/main 完全对齐 (`547e23c`)，工作区干净，`go test ./...` 全部通过，Phase 03 改动也已 fresh 执行 `go test ./...` 通过。
+- 本轮未接 MCP，也未新增业务动作。
+- `ready_for_next_phase = false`
+- `next_phase = phase-04-review`
+- 当前 next step：只进入 Phase 04 review，不继续 Phase 04 编码。
+- `main_cleanup_verification = completed` — Phase 03 closeout merge 已进入 `main` (`8ac0273`)，Phase 04 当前在功能分支上 fresh 执行 `go test ./... -count=1`。
+- 全局状态同步说明见 [design_docs/coordination/phase-03-phase-04-global-state-sync.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/coordination/phase-03-phase-04-global-state-sync.md)。
 
 ## 已完成
 
@@ -128,6 +134,30 @@
   - [design_docs/26-phase-03-mysql-database-create-notes-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/26-phase-03-mysql-database-create-notes-v0.1.md)
   - [design_docs/27-phase-03-manual-verification-runbook-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/27-phase-03-manual-verification-runbook-v0.1.md)
 
+## Phase 04 已新增
+
+- 已把 [internal/skill/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/skill/contracts.go) 从 contract-only 扩展为最小可运行 skill contract：
+  - `request_mysql_database_create`
+  - `execute_assistant_order`
+  - auto-chain result / error 映射
+- 已新增 [internal/skill/service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/skill/service.go) 作为最小 Skill SDK / HTTP client：
+  - 通过 `POST /api/v1/action-requests` 发起 request
+  - 通过 `POST /api/v1/orders/{order_id}/execute` 发起 execute
+  - 在 `approval_required=false && status=APPROVED` 时可选自动串联 execute
+  - auto-chain 失败时保留 request 成功结果与 trace/order 引用
+- 已把 [internal/api/server.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/api/server.go) 的 submit 路由收敛为：
+  - 认证主体优先
+  - body/header `principal_id` mismatch 返回 `REQ_INVALID`
+- 已新增 skill 测试覆盖：
+  - northbound HTTP mapping
+  - non-prod auto-chain success
+  - prod waiting approval no execute
+  - auto-chain execute permission denial fallback
+  - real Control API integration test
+- 已新增 Phase 04 文档：
+  - [design_docs/28-phase-04-deep-agent-integration-notes-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/28-phase-04-deep-agent-integration-notes-v0.1.md)
+  - [design_docs/29-phase-04-local-runbook-v0.1.md](/Users/zqw/Desktop/Project/dba_ai_assistant/design_docs/29-phase-04-local-runbook-v0.1.md)
+
 ## Phase 02 已新增
 
 - 已把 [internal/persistence/memory.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/persistence/memory.go) 接成共享 in-memory persistence：
@@ -176,8 +206,6 @@
   - 旧 Phase 01 noop 仍保留在仓库中，但主程序已改用新的 repo-backed `ApprovalService`。
 - [internal/application/audit/memory_service.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/application/audit/memory_service.go)
   - 当前仍是内存型 append-only 审计，不是持久化数据库实现。
-- [internal/skill/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/skill/contracts.go)
-  - skill 输入输出 contract 已建立，但还没有单独的 Skill runtime / SDK 层。
 - [internal/persistence/contracts.go](/Users/zqw/Desktop/Project/dba_ai_assistant/internal/persistence/contracts.go)
   - 仍是内存 contract + store，不是数据库级持久化仓储。
 
@@ -189,17 +217,19 @@
 - 持久化数据库版 append-only audit repository
 - 持久化数据库版 unified repository
 - 多 adapter 路由策略
+- MCP 接入
 
 ## 下一阶段准备做什么
 
-1. Phase 03 review / closeout 已完成，当前仓库状态允许进入下一阶段，但本轮未进入 Phase 04 实施。
-2. 下一阶段目标为 Phase 04：Deep Agent 接入。
+1. 先完成 Phase 04 review，确认最小 Deep Agent 接入没有越过 Control Layer 权威边界。
+2. review 通过后，再决定是否进入 Phase 05：MCP 接入。
 3. 若继续打磨控制层本体，优先把 approval actor 从“认证上下文优先”收紧到“只信任认证上下文”。
 4. 把当前内存型 idempotency / audit / evidence / repository 逐步切到持久化实现。
 
 ## 当前架构风险与待确认点
 
 - 当前 approval API 已做到“认证上下文优先 + mismatch 阻断”，但还没有完全禁止无认证上下文时的 body fallback。
+- 当前 submit API 也已做到“认证上下文优先 + mismatch 阻断”，但 request 权限模型仍沿用当前 static principal resolver / policy 行为。
 - 当前 persistence 是共享内存 store，适合 Phase 02 演示与测试，但不具备重启恢复能力。
 - 目前 northbound auth context 通过 HTTP header 占位承载，正式接入时需要替换成真实认证中间件，但不能改变 `PrincipalResolver` 是唯一身份装配入口这一原则。
 - review 文档里把 `APPROVAL_EXPIRED` 写成 order status，但正式 spec / interface design / schema 的权威语义是 order `EXPIRED` + audit event `APPROVAL_EXPIRED`。当前代码按正式文档实现，并已用 `// REVIEW:` 注释标明。
@@ -209,13 +239,20 @@
   - 不绕过审批 / execute 分离
   - 不在 `AssetResolver` 中引入 fuzzy match
   - 不扩散到其他动作
+- 当前 Deep Agent Skill 接入必须继续保持：
+  - 不直接碰 adapter
+  - 不直接执行 SQL
+  - 不接 MCP
+  - 不新增动作
 
 ## 验证记录
 
 - reviewed branch `feat/p1-baseline-gap-and-guardrails` 已在 Claude review 中确认：`go test ./...` 全部通过
 - `docs/phase-01-closeout-v2` 已于 2026-03-29 fresh 执行 `go test ./...` 并通过
 - `feat/p2-min-control-flow-v2` 已获 Claude review `PASS`，允许进入 Phase 03
-- `go test ./...`
+- `go test ./internal/skill -count=1`
+- `go test ./internal/api ./internal/application/actionrequest ./internal/skill -count=1`
+- `go test ./... -count=1`
 - 本地 HTTP smoke 已验证：
   - prod: `WAITING_APPROVAL -> APPROVED -> SUCCEEDED`
   - stale: `APPROVED -> PLAN_STALE`
